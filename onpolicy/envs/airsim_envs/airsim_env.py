@@ -40,10 +40,19 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         self.cfg = cfg
         self.navigation_3d = cfg.getboolean('options', 'navigation_3d')
         self.velocity_step = cfg.getfloat('options', 'velocity_step')
+        self.acc_step = cfg.getfloat('options', 'acc_step')
         self.yaw_step = cfg.getfloat('options', 'yaw_step')
+        self.ayaw_step = cfg.getfloat('options', 'ayaw_step')
         self.vz_step = cfg.getfloat('options', 'vz_step')
+        self.az_step = cfg.getfloat('options', 'az_step')
         self.depth_image_request = airsim.ImageRequest('0', airsim.ImageType.DepthPerspective, True, False)
-
+        self.acc_xy_max = cfg.getfloat('multirotor', 'acc_xy_max')
+        self.v_xy_max = cfg.getfloat('multirotor', 'v_xy_max')
+        self.v_xy_min = cfg.getfloat('multirotor', 'v_xy_min')
+        self.v_z_max = cfg.getfloat('multirotor', 'v_z_max')
+        self.yaw_rate_max_deg = cfg.getfloat('multirotor', 'yaw_rate_max_deg')
+        self.yaw_rate_max_rad = math.radians(self.yaw_rate_max_deg)
+        self.max_vertical_difference = 5
 
         if self.navigation_3d:
             self.state_feature_length = 6
@@ -52,18 +61,23 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         self.dt = cfg.getfloat('multirotor', 'dt')
         self.env_name = cfg.get('options', 'env_name')
         self.num_of_drones = cfg.getint('options', 'num_of_drone')
+        self.axy_n = np.zeros(self.num_of_drones)
         self.vxy_n = np.zeros(self.num_of_drones)
+        self.yaw_acc_n = np.zeros(self.num_of_drones)
         self.yaw_sp_n = np.zeros(self.num_of_drones)
         self.vx_n = self.vy_n = self.v_z_n = np.zeros(self.num_of_drones)
+        self.ax_n = self.ay_n = self.a_z_n = np.zeros(self.num_of_drones)
         self.keyboard_debug = cfg.getboolean('options', 'keyboard_debug')
         self.generate_q_map = cfg.getboolean('options', 'generate_q_map')
         print('Environment: ', self.env_name, "num_of_drones: ", self.num_of_drones)
         self.agents = []
         self.client = airsim.MultirotorClient(ip=cfg.get('options', 'ip'))
         self.trajectory_list = []
+        self.cur_state = None
         for i in range(self.num_of_drones):
             self.agents.append(DroneDynamicsAirsim(self.cfg, self.client, i + 1))
             self.trajectory_list.append([])
+
 
         # TODO cfg
         self.work_space_x = [-100, 350]
@@ -87,12 +101,13 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         self.screen_width = cfg.getint('environment', 'screen_width')
         self.observation_space = []
         self.share_observation_space = []
+
         self.action_space = []
         for each in range(self.num_of_drones):
-            self.observation_space.append(spaces.Box(low=0, high=255, shape=(2 * self.screen_height * self.screen_width, ), dtype=np.uint8))
+            self.observation_space.append(spaces.Box(low=0, high=255, shape=(6, ), dtype=np.uint8))
             self.action_space.append(self.agents[0].action_space)
         self.share_observation_space = [spaces.Box(
-            low=0, high=255, shape=(self.screen_height * self.screen_width * 2 * self.num_of_drones, ),
+            low=0, high=255, shape=(6 * self.num_of_drones, ),
             dtype=np.uint8) for _ in range(self.num_of_drones)]
 
     def seed(self, seed=None):
@@ -113,13 +128,15 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         # self.client.simPause(False)
         for i, agent in enumerate(self.agents):
             self._set_action(i, agent)
-            self.trajectory_list[i].append(agent.get_position())
+            if i % int(1 // self.dt) == 0:
+                self.trajectory_list[i].append(agent.get_position())
 
         time.sleep(0.1)
         # self.client.simPause(True)
         # advance world state
         # self.world.step()  # core.step()
         # record observation for each agent
+        self.cur_state = self.get_all_state()
         for i, agent in enumerate(self.agents):
             obs_n.append(self._get_obs(agent))
             done_n.append(self._get_done(agent))
@@ -138,6 +155,11 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
             reward_n = [[reward]] * self.num_of_drones
         return obs_n, reward_n, done_n, info_n
 
+    def get_all_state(self):
+        cur_state = []
+        for each in self.agents:
+            cur_state.append(self.client.getMultirotorState(each.name).kinematics_estimated)
+        return cur_state
 
     def compute_velocity(self, action_n):
         # yaw_rate_sp_n = action_n[:, -1]
@@ -158,12 +180,27 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         action_n = np.array(action_n)
         action_n -= 5
         if self.navigation_3d:
-            self.v_z_n += action_n[:, 1] * self.vz_step
+            self.a_z_n += action_n[:, 1] * self.az_step
+            # self.v_z_n += action_n[:, 1] * self.vz_step
 
         else:
-            self.v_z_n = np.zeros(self.num_of_drones)
-        self.vxy_n += action_n[:, 0] * self.velocity_step
-        self.yaw_sp_n += action_n[:, -1] * self.yaw_step
+            self.a_z_n = np.zeros(self.num_of_drones)
+        self.v_z_n += self.a_z_n * self.dt
+        self.v_z_n[self.v_z_n > self.v_z_max] = self.v_z_max
+        self.v_z_n[self.v_z_n < -self.v_z_max] = -self.v_z_max
+        self.axy_n += action_n[:, 0] * self.acc_step
+        # self.vxy_n += action_n[:, 0] * self.velocity_step
+        self.vxy_n += self.axy_n * self.dt
+        self.vxy_n[self.vxy_n > self.v_xy_max] = self.v_xy_max
+        self.vxy_n[self.vxy_n < self.v_xy_min] = self.v_xy_min
+
+        # self.vxy_n[self.vxy_n < self.v_xy_min] = self.v_xy_min
+        self.yaw_acc_n = np.radians(action_n[:, -1] * self.yaw_step)
+        yaw_n = []
+        for each in range(0, self.num_of_drones):
+            yaw_n.append(self.agents[each].get_attitude()[2])
+        yaw_n = np.array(yaw_n)
+        self.yaw_sp_n = yaw_n + self.yaw_acc_n * self.dt
         self.yaw_sp_n[self.yaw_sp_n > math.radians(180)] -= math.pi * 2
         self.yaw_sp_n[self.yaw_sp_n < math.radians(-180)] += math.pi * 2
         self.vx_n = self.vxy_n * np.cos(self.yaw_sp_n)
@@ -172,19 +209,20 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
     # set env action for a particular agent
     def _set_action(self, i, agent):
         if self.navigation_3d:
-            self.client.moveByVelocityAsync(self.vx_n[i], self.vy_n[i], -self.v_z_n[i], self.dt,
+            self.client.moveByVelocityAsync(self.vx_n[i], self.vy_n[i], -self.v_z_n[i], self.dt * 2.5,
                                             vehicle_name=agent.name,
                                             drivetrain=airsim.DrivetrainType.MaxDegreeOfFreedom,
                                             yaw_mode=airsim.YawMode(is_rate=True, yaw_or_rate=math.degrees(
                                                self.yaw_sp_n[i])))
         else:
-            self.client.moveByVelocityZAsync(self.vx_n[i], self.vy_n[i], - agent.start_position[2], self.dt,
+            self.client.moveByVelocityZAsync(self.vx_n[i], self.vy_n[i], - agent.start_position[2], self.dt * 2.5,
                                              vehicle_name=agent.name,
                                              drivetrain=airsim.DrivetrainType.MaxDegreeOfFreedom,
                                              yaw_mode=airsim.YawMode(is_rate=True, yaw_or_rate=math.degrees(
                                                  self.yaw_sp_n[i])))
+            # print(self.vx_n, self.vy_n, math.degrees(self.yaw_sp_n[0]))
 
-    def _get_obs(self, agent):
+    def _get_obs_with_state(self, agent):
         image = self.get_depth_image(agent)
         image_resize = cv2.resize(image, (self.screen_width, self.screen_height))
         image_scaled = image_resize * 100
@@ -210,6 +248,31 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         # image_with_state = image_with_state.swapaxes(0, 1)
 
         return image_with_state.reshape(-1,)
+
+    def _get_obs(self, agent):
+        state_feature = agent._get_state_feature()
+        for each in range(self.num_of_drones):
+            if each + 1 != agent.id:
+                if self.navigation_3d:
+                    state_feature = np.append(state_feature, [self.cur_state[each].position.x_val,
+                                                              self.cur_state[each].position.y_val,
+                                                              self.cur_state[each].position.z_val,
+                                                              self.cur_state[each].linear_velocity.x_val,
+                                                              self.cur_state[each].linear_velocity.y_val,
+                                                              self.cur_state[each].linear_velocity.z_val])
+                else:
+                    state_feature = np.append(state_feature, [self.cur_state[each].position.x_val,
+                                                              self.cur_state[each].position.y_val,
+                                                              self.cur_state[each].linear_velocity.x_val,
+                                                              self.cur_state[each].linear_velocity.y_val])
+        min_dis = 1000
+        effective_direction = 0
+        for each in range(36):
+            tmp = self.client.getDistanceSensorData("Distance"+str(each), agent.name)
+            if tmp.distance < min_dis:
+                min_dis = tmp.distance
+                effective_direction = each * 10
+        return np.append(state_feature, [min_dis, effective_direction])
 
     def _get_reward(self, done, agent, action):
         reward = 0

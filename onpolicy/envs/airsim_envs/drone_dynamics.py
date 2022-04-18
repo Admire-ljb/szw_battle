@@ -63,11 +63,11 @@ class DroneDynamicsAirsim:
             # self.action_space = spaces.Box(low=np.array([-self.acc_xy_max, -self.v_z_max, -self.yaw_rate_max_rad]),
             #                                high=np.array([self.acc_xy_max, self.v_z_max, self.yaw_rate_max_rad]),
             #                                dtype=np.float32)
-            self.action_space = spaces.MultiDiscrete([11,11, 11])
+            self.action_space = spaces.MultiDiscrete([11, 11, 11])
         else:
             self.state_feature_length = 4
             self.action_space = spaces.MultiDiscrete([11, 11])
-            # self.action_space = spaces.Box(low=np.array([-self.acc_xy_max, -self.yaw_rate_max_rad]),
+            # self. d_space = spaces.Box(low=np.array([-self.acc_xy_max, -self.yaw_rate_max_rad]),
             #                                high=np.array([self.acc_xy_max, self.yaw_rate_max_rad]),
             #                                dtype=np.float32)
 
