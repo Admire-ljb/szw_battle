@@ -19,19 +19,20 @@ class DroneDynamicsAirsim:
         self.navigation_3d = cfg.getboolean('options', 'navigation_3d')
         self.dt = cfg.getfloat('multirotor', 'dt')
         # start and goal position
-        self.start_position = [0, 0, 2]
+        self.start_position = [0, 0, 5]
         self.start_random_angle = None
         self.goal_position = [0, 0, 0]
         self.goal_distance = 10
         self.goal_random_angle = 0
         self.accept_radius = cfg.getint('environment', 'accept_radius')
-        start_position = [0.0, 0.0, 5.0]
-        goal_position = [28.0, -20.0, 1.0]
-        self.set_start(start_position, random_angle=0)
-        self.set_goal(distance=90, random_angle=0)
+        # start_position = [0.0, 0.0, 5.0]
+        # goal_position = [28.0, -20.0, 1.0]
+        # self.set_start(start_position, random_angle=0)
+        # self.set_goal(distance=90, random_angle=0)
         self.goal_rect = None
         self.previous_distance_from_des_point = self.goal_distance
         # states
+
         self.x, self.y, self.z = self.get_position()
         self.v_xy = 0
         self.v_z = 0
@@ -48,7 +49,7 @@ class DroneDynamicsAirsim:
         self.v_xy_sp = 0
         self.v_z_sp = 0
         self.yaw_rate_sp = 0
-
+        self.max_step = 1800
         # action space
         self.acc_xy_max = cfg.getfloat('multirotor', 'acc_xy_max')
         self.v_xy_max = cfg.getfloat('multirotor', 'v_xy_max')
@@ -57,7 +58,6 @@ class DroneDynamicsAirsim:
         self.yaw_rate_max_deg = cfg.getfloat('multirotor', 'yaw_rate_max_deg')
         self.yaw_rate_max_rad = math.radians(self.yaw_rate_max_deg)
         self.max_vertical_difference = 5
-
         if self.navigation_3d:
             self.state_feature_length = 6
             # self.action_space = spaces.Box(low=np.array([-self.acc_xy_max, -self.v_z_max, -self.yaw_rate_max_rad]),
@@ -67,33 +67,35 @@ class DroneDynamicsAirsim:
         else:
             self.state_feature_length = 4
             self.action_space = spaces.MultiDiscrete([11, 11])
-            # self. d_space = spaces.Box(low=np.array([-self.acc_xy_max, -self.yaw_rate_max_rad]),
+            # self.action_space = spaces.Box(low=np.array([-self.acc_xy_max, -self.yaw_rate_max_rad]),
             #                                high=np.array([self.acc_xy_max, self.yaw_rate_max_rad]),
             #                                dtype=np.float32)
 
-    def reset(self):
+    def reset(self, yaw_degree):
         # self.client.reset()
         # reset goal
-        self.update_goal_pose()
+        # self.update_goal_pose()
         self.client.enableApiControl(True, vehicle_name=self.name)
         self.client.armDisarm(True, vehicle_name=self.name)
         # reset start
-        yaw_noise = self.start_random_angle * np.random.random()
+        # yaw_noise = self.start_random_angle * np.random.random()
 
         # set airsim pose
-        pose = self.client.simGetVehiclePose(self.name)
-        pose.position.x_val = self.start_position[0]
-        pose.position.y_val = self.start_position[1]
-        pose.position.z_val = - self.start_position[2]
-        pose.orientation = airsim.to_quaternion(0, 0, yaw_noise)
+        # pose = self.client.simGetObjectPose(self.name)
+        # pose.position.x_val = self.start_position[0]
+        # pose.position.y_val = self.start_position[1]
+        # pose.position.z_val = - self.start_position[2]
+        # pose.orientation = airsim.to_quaternion(0, 0, yaw_noise)
         # self.client.simSetVehiclePose(pose, True, vehicle_name=self.name)
 
         # self.client.simPause(False)
-
+        self.step = 0
 
         # take off
-        self.client.moveToZAsync(-self.start_position[2], 2, vehicle_name=self.name)
+        # self.client.moveToZAsync(-self.start_position[2], 2, vehicle_name=self.name)
+        self.client.moveByRollPitchYawZAsync(0, 0, np.radians(yaw_degree), -self.start_position[2], 2, vehicle_name=self.name)
         # self.client.simPause(True)
+        pre_collision_info = self.client.simGetCollisionInfo(vehicle_name=self.name)
         self.goal_distance = self.get_distance_to_goal_2d()
         self.previous_distance_from_des_point = self.goal_distance
 
@@ -223,7 +225,10 @@ class DroneDynamicsAirsim:
         return yaw_error
 
     def get_position(self):
-        position = self.client.simGetVehiclePose().position
+        position = self.client.simGetObjectPose(self.name).position
+        self.x = position.x_val
+        self.y = position.y_val
+        self.z = position.z_val
         return [position.x_val, position.y_val, -position.z_val]
 
     def get_velocity(self):
@@ -238,7 +243,7 @@ class DroneDynamicsAirsim:
         return [velocity_xy, -velocity_z, yaw_rate]
 
     def get_attitude(self):
-        self.state_current_attitude = self.client.simGetVehiclePose().orientation
+        self.state_current_attitude = self.client.simGetVehiclePose(self.name).orientation
         return airsim.to_eularian_angles(self.state_current_attitude)
 
     def get_attitude_cmd(self):
@@ -255,7 +260,7 @@ class DroneDynamicsAirsim:
 
     def is_in_desired_pose(self):
         in_desired_pose = False
-        if self.get_distance_to_goal_3d() < self.accept_radius:
+        if self.step < self.accept_radius:
             in_desired_pose = True
         return in_desired_pose
 

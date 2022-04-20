@@ -171,7 +171,7 @@ def main(arg):
     if cfg.getboolean('algorithm', 'use_eval') and eval_envs is not envs:
         eval_envs.close()
 
-    if cfg.getboolean('options', 'use_wandb'):
+    if cfg.getboolean('algorithm', 'use_wandb'):
         run.finish()
     else:
         runner.writter.export_scalars_to_json(str(runner.log_dir + '/summary.json'))

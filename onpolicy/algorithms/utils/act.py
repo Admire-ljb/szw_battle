@@ -26,9 +26,7 @@ class ACTLayer(nn.Module):
             self.action_out = Bernoulli(inputs_dim, action_dim, use_orthogonal, gain)
         elif action_space.__class__.__name__ == "MultiDiscrete":
             self.multi_discrete = True
-            action_dims = []
-            for each in range(action_space.shape[0]):
-                action_dims.append(3)
+            action_dims = action_space.nvec
             self.action_outs = []
             for action_dim in action_dims:
                 self.action_outs.append(Categorical(inputs_dim, action_dim, use_orthogonal, gain))
@@ -51,7 +49,7 @@ class ACTLayer(nn.Module):
         :return actions: (torch.Tensor) actions to take.
         :return action_log_probs: (torch.Tensor) log probabilities of taken actions.
         """
-        if self.mixed_action :
+        if self.mixed_action:
             actions = []
             action_log_probs = []
             for action_out in self.action_outs:

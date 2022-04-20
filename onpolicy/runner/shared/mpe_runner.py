@@ -93,7 +93,7 @@ class MPERunner(Runner):
                         agent_k = 'agent%i/individual_rewards' % agent_id
                         env_infos[agent_k] = idv_rews
 
-                train_infos["average_episode_rewards"] = np.mean(self.buffer.rewards) * self.episode_length
+                train_infos["average_episode_rewards"] = np.mean(self.buffer.rewards)
                 print("average episode rewards is {}".format(train_infos["average_episode_rewards"]))
                 self.log_train(train_infos, total_num_steps)
                 self.log_env(env_infos, total_num_steps)
@@ -135,7 +135,7 @@ class MPERunner(Runner):
         # rearrange action
         if self.envs.action_space[0].__class__.__name__ == 'MultiDiscrete':
             for i in range(self.envs.action_space[0].shape[0]):
-                uc_actions_env = np.eye(2 + 1)[actions[:, :, i]]
+                uc_actions_env = np.eye(self.envs.action_space[0].nvec[i] + 1)[actions[:, :, i]]
                 if i == 0:
                     actions_env = uc_actions_env
                 else:
