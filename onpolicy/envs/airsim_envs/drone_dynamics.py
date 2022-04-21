@@ -32,7 +32,7 @@ class DroneDynamicsAirsim:
         self.goal_rect = None
         self.previous_distance_from_des_point = self.goal_distance
         # states
-
+        self.is_crash = False
         self.x, self.y, self.z = self.get_position()
         self.v_xy = 0
         self.v_z = 0
@@ -77,6 +77,7 @@ class DroneDynamicsAirsim:
         # self.update_goal_pose()
         self.client.enableApiControl(True, vehicle_name=self.name)
         self.client.armDisarm(True, vehicle_name=self.name)
+        self.is_crash = False
         # reset start
         # yaw_noise = self.start_random_angle * np.random.random()
 
@@ -93,11 +94,12 @@ class DroneDynamicsAirsim:
 
         # take off
         # self.client.moveToZAsync(-self.start_position[2], 2, vehicle_name=self.name)
-        self.client.moveByRollPitchYawZAsync(0, 0, np.radians(yaw_degree), -self.start_position[2], 2, vehicle_name=self.name)
+        f = self.client.moveByRollPitchYawZAsync(0, 0, np.radians(yaw_degree), -self.start_position[2], 2, vehicle_name=self.name)
         # self.client.simPause(True)
         pre_collision_info = self.client.simGetCollisionInfo(vehicle_name=self.name)
         self.goal_distance = self.get_distance_to_goal_2d()
         self.previous_distance_from_des_point = self.goal_distance
+        return f
 
     def update_goal_pose(self):
         # if goal is given by rectangular mode

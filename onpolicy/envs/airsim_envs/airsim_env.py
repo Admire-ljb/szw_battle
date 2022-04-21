@@ -41,7 +41,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         print("init airsim-gym-env.")
         #conig
         self.current_step = 0
-        self.max_episode_steps = 1000
+        # self.max_episode_steps = 1000
         self.model = None
         self.data_path = None
         self.shared_reward = True
@@ -94,7 +94,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         self.work_space_x = [-15, 80]
         self.work_space_y = [-40, 25]
         self.work_space_z = [-10, 10]
-        self.max_episode_steps = 500
+        self.max_episode_steps = 2000
 
         # trainning state
         self.episode_num = 0
@@ -137,18 +137,24 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         # set action for each agent
         self.compute_velocity(action_n)
         # self.client.simPause(False)
+        self.client.simPause(False)
+        fi = []
         for i, agent in enumerate(self.agents):
-            self._set_action(i, agent)
+            fi.append(self._set_action(i, agent))
+        for f in fi:
+            f.join()
+        self.client.simPause(True)
             # if i % int(1 // self.dt) == 0:
             #     self.trajectory_list[i].append(agent.get_position())
 
-        time.sleep(0.1 / self.world_clock)
+        # time.sleep(0.1 / self.world_clock)
         # self.client.simPause(True)
         # advance world state
         # self.world.step()  # core.step()
         # record observation for each agent
         self.cur_state = self.get_all_state()
         for i, agent in enumerate(self.agents):
+            _ = self.is_crashed(agent)
             obs_n.append(self._get_obs(agent))
             done_n.append(self._get_done(agent))
             reward_n.append(self._get_reward(done_n[i], agent, action_n[i]))
@@ -157,10 +163,10 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
                 print(info)
             info_n.append(info)
 
-        for flag in done_n:
-            if flag:
-                for each in range(len(done_n)):
-                    done_n[each] = True
+        # for flag in done_n:
+        #     if flag:
+        #         for each in range(len(done_n)):
+        #             done_n[each] = True
         self.cumulated_episode_reward += np.array(reward_n)
 
         """all agents get total reward in cooperative case, if shared reward,
@@ -227,13 +233,13 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
     # set env action for a particular agent
     def _set_action(self, i, agent):
         if self.navigation_3d:
-            self.client.moveByVelocityAsync(self.vx_n[i], self.vy_n[i], -self.v_z_n[i], self.dt * 2.5,
+            return self.client.moveByVelocityAsync(self.vx_n[i], self.vy_n[i], -self.v_z_n[i], self.dt,
                                             vehicle_name=agent.name,
                                             drivetrain=airsim.DrivetrainType.MaxDegreeOfFreedom,
                                             yaw_mode=airsim.YawMode(is_rate=True, yaw_or_rate=math.degrees(
                                                self.yaw_sp_n[i])))
         else:
-            self.client.moveByVelocityZAsync(self.vx_n[i], self.vy_n[i], - agent.start_position[2], self.dt * 2.5,
+            return self.client.moveByVelocityZAsync(self.vx_n[i], self.vy_n[i], - agent.start_position[2], self.dt,
                                              vehicle_name=agent.name,
                                              drivetrain=airsim.DrivetrainType.MaxDegreeOfFreedom,
                                              yaw_mode=airsim.YawMode(is_rate=True, yaw_or_rate=math.degrees(
@@ -307,7 +313,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         for each, points in enumerate(self.trajectory_list):
             if each != agent.id - 1:
                 for point in points:
-                    if judge_dis(point, agent, 3):
+                    if judge_dis(point, agent, 1):
                         return True
         return False
 
@@ -320,14 +326,13 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
             return True
 
     def _get_reward(self, done, agent, action):
-        reward = 1
-        reward_crash = -300
-        reward_outside = -300
-        if not done:
-            if self.is_duplicate(agent):
-                reward -= 2
-            elif self.is_new_area(agent):
-                reward += 5
+        reward = 2
+        reward_crash = -100
+        reward_outside = -100
+        if self.is_duplicate(agent):
+            reward -= 2
+        elif self.is_new_area(agent):
+            reward += 5
             # normalized to 100 according to goal_distance
             # reward_obs = 0
             # action_cost = 0
@@ -339,21 +344,20 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
             #     action_cost += v_z_cost
 
             # action_cost += yaw_speed_cost
-        else:
-            if agent.is_crashed():
-                reward = reward_crash
-            elif self.is_not_inside_workspace(agent):
-                reward = reward_outside
+
+        if self.is_crashed(agent):
+            reward += reward_crash
+        if self.is_not_inside_workspace(agent):
+            reward += reward_outside
         return reward
 
     def _get_done(self, agent):
         is_not_inside_workspace_now = self.is_not_inside_workspace(agent)
         # has_reached_des_pose = agent.is_in_desired_pose()
-        too_close_to_obstable = self.is_crashed(agent)
 
         # We see if we are outside the Learning Space
         episode_done = is_not_inside_workspace_now or \
-                       too_close_to_obstable or \
+                       agent.is_crash or \
                        self.current_step >= self.max_episode_steps
         return episode_done
 
@@ -362,13 +366,14 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         collision_info = self.client.simGetCollisionInfo(vehicle_name=agent.name)
         if collision_info.has_collided:
             is_crashed = True
+            agent.is_crash = True
         return is_crashed
 
     def _get_info(self, agent, reward):
         info = {
             'id': agent.id,
             # 'is_success': agent.is_in_desired_pose(),
-            'is_crash': agent.is_crashed(),
+            'is_crash': agent.is_crash,
             'is_not_in_workspace': self.is_not_inside_workspace(agent),
             'step_num': self.current_step
             # 'individual_reward': reward
@@ -380,14 +385,17 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         # reset state
         self.client.reset()
         self.init_pose = []
-
+        fi = []
+        self.client.simPause(False)
         for agent in self.agents:
             self.init_pose.append(self.client.simGetObjectPose(agent.name).position)
-            agent.reset(self.init_yaw_degree[agent.id-1])
-        time.sleep(2/self.world_clock)
+            fi.append(agent.reset(self.init_yaw_degree[agent.id-1]))
+        for f in fi:
+            f.join()
+        self.client.simPause(True)
+        # time.sleep(2/self.world_clock)
         self.cur_state = self.get_all_state()
         self.episode_num += 1
-        # self.current_step = 0
         self.cumulated_episode_reward = np.zeros(self.num_of_drones)
         self.current_step = 0
         self.trajectory_list = []
