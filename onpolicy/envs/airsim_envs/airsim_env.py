@@ -91,8 +91,8 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
 
 
         # TODO cfg
-        self.work_space_x = [-15, 80]
-        self.work_space_y = [-40, 25]
+        self.work_space_x = [-20, 85]
+        self.work_space_y = [-45, 30]
         self.work_space_z = [-10, 10]
         self.max_episode_steps = 2000
 
@@ -115,10 +115,10 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
 
         self.action_space = []
         for each in range(self.num_of_drones):
-            self.observation_space.append(spaces.Box(low=0, high=100, shape=(self.state_feature_length + 3, ), dtype=np.uint8))
+            self.observation_space.append(spaces.Box(low=0, high=100, shape=(self.state_feature_length + 6, ), dtype=np.uint8))
             self.action_space.append(self.agents[0].action_space)
         self.share_observation_space = [spaces.Box(
-            low=0, high=100, shape=((self.state_feature_length + 3) * self.num_of_drones, ),
+            low=0, high=100, shape=((self.state_feature_length + 6) * self.num_of_drones, ),
             dtype=np.uint8) for _ in range(self.num_of_drones)]
 
     def seed(self, seed=None):
@@ -299,15 +299,25 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
                 state_feature_self = np.append(state_feature_self, tmp)
         state_feature = np.append(state_feature_self, state_feature_other)
         min_dis = 1000
-        effective_direction = 0
+        max_dis = 0
+        effective_direction_min = 0
+        effective_direction_max = 0
+        forward_dis = self.client.getDistanceSensorData("Distance0", agent.name).distance
         for each in range(36):
             tmp = self.client.getDistanceSensorData("Distance"+str(each), agent.name)
             if tmp.distance < min_dis:
                 min_dis = tmp.distance
-                effective_direction = each * 10
+                effective_direction_min = each * 10
+            if tmp.distance > max_dis:
+                max_dis = tmp.max_distance
+                effective_direction_max = each
         min_dis_norm = min_dis / 40 * 100
-        effective_direction_norm = effective_direction / 360 * 100
-        return np.append(state_feature, [min_dis_norm, effective_direction_norm, self.init_yaw_degree[agent.id-1]])
+        max_dis_norm = max_dis / 40 * 100
+        forward_dis_norm = forward_dis / 40 * 100
+        effective_direction_norm_min = effective_direction_min / 360 * 100
+        effective_direction_norm_max = effective_direction_max / 360 * 100
+        return np.append(state_feature, [min_dis_norm, effective_direction_norm_min, max_dis_norm,
+                                         effective_direction_norm_max, forward_dis_norm, self.init_yaw_degree[agent.id-1]])
 
     def is_duplicate(self, agent):
         for each, points in enumerate(self.trajectory_list):
