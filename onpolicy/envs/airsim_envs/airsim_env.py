@@ -67,9 +67,9 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         self.env_name = cfg.get('options', 'env_name')
         self.num_of_drones = cfg.getint('options', 'num_of_drone')
         if self.navigation_3d:
-            self.state_feature_length = 6 * self.num_of_drones
+            self.state_feature_length = 5 * self.num_of_drones
         else:
-            self.state_feature_length = 4 * self.num_of_drones
+            self.state_feature_length = 3 * self.num_of_drones
         self.axy_n = np.zeros(self.num_of_drones)
         self.vxy_n = np.zeros(self.num_of_drones)
         self.yaw_acc_n = np.zeros(self.num_of_drones)
@@ -140,10 +140,11 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         self.client.simPause(False)
         fi = []
         for i, agent in enumerate(self.agents):
-            fi.append(self._set_action(i, agent))
+            if not agent.is_crash:
+                fi.append(self._set_action(i, agent))
         for f in fi:
             f.join()
-        # self.client.simPause(True)
+        self.client.simPause(True)
             # if i % int(1 // self.dt) == 0:
             #     self.trajectory_list[i].append(agent.get_position())
 
@@ -156,7 +157,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         for i, agent in enumerate(self.agents):
             _ = self.is_crashed(agent)
             obs_n.append(self._get_obs(agent))
-            print(obs_n[i])
+            # print(obs_n[i])
             done_n.append(self._get_done(agent))
             reward_n.append(self._get_reward(obs_n[i], agent, action_n[i]))
             info = self._get_info(agent, reward_n[i])
@@ -229,6 +230,8 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         self.yaw_sp_n = yaw_n + self.yaw_acc_n * self.dt
         self.yaw_sp_n[self.yaw_sp_n > math.radians(180)] -= math.pi * 2
         self.yaw_sp_n[self.yaw_sp_n < math.radians(-180)] += math.pi * 2
+        # self.yaw_sp_n[self.yaw_sp_n > self.yaw_rate_max_rad] = self.yaw_rate_max_rad
+        # self.yaw_sp_n[:] = 0
         self.vx_n = self.vxy_n * np.cos(self.yaw_sp_n)
         self.vy_n = self.vxy_n * np.sin(self.yaw_sp_n)
 
@@ -238,13 +241,13 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
             return self.client.moveByVelocityAsync(self.vx_n[i], self.vy_n[i], -self.v_z_n[i], self.dt,
                                             vehicle_name=agent.name,
                                             drivetrain=airsim.DrivetrainType.MaxDegreeOfFreedom,
-                                            yaw_mode=airsim.YawMode(is_rate=True, yaw_or_rate=math.degrees(
+                                            yaw_mode=airsim.YawMode(is_rate=False, yaw_or_rate=math.degrees(
                                                self.yaw_sp_n[i])))
         else:
             return self.client.moveByVelocityZAsync(self.vx_n[i], self.vy_n[i], - agent.start_position[2], self.dt,
                                              vehicle_name=agent.name,
                                              drivetrain=airsim.DrivetrainType.MaxDegreeOfFreedom,
-                                             yaw_mode=airsim.YawMode(is_rate=True, yaw_or_rate=math.degrees(
+                                             yaw_mode=airsim.YawMode(is_rate=False, yaw_or_rate=math.degrees(
                                                  self.yaw_sp_n[i])))
             # print(self.vx_n, self.vy_n, math.degrees(self.yaw_sp_n[0]))
 
@@ -276,11 +279,13 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         return image_with_state.reshape(-1,)
 
     def _get_obs(self, agent):
+        if agent.is_crash:
+            return np.ones(self.state_feature_length + 6)
         state_feature_other = np.array([])
         state_feature_self = np.array([])
         for each in range(self.num_of_drones):
-            velocity_xy = math.sqrt(pow(self.cur_state[each].linear_velocity.x_val, 2) + pow(self.cur_state[each].linear_velocity.y_val, 2))
-            velocity_xy_norm = (velocity_xy - self.v_xy_min) / (self.v_xy_max - self.v_xy_min)
+            # velocity_xy = math.sqrt(pow(self.cur_state[each].linear_velocity.x_val, 2) + pow(self.cur_state[each].linear_velocity.y_val, 2))
+            # velocity_xy_norm = (velocity_xy - self.v_xy_min) / (self.v_xy_max - self.v_xy_min)
             velocity_z = self.cur_state[each].linear_velocity.z_val
             velocity_z_norm = (velocity_z / self.v_z_max / 2 + 0.5)
             yaw_rate_sp = self.cur_state[each].angular_velocity.z_val
@@ -291,10 +296,10 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
             z_norm = (self.cur_state[each].position.z_val - self.work_space_z[0]) / (self.work_space_z[1] - self.work_space_z[0])
             if self.navigation_3d:
                 tmp = [x_norm, y_norm, z_norm,
-                       velocity_xy_norm, velocity_z_norm, yaw_rate_norm]
+                       velocity_z_norm, yaw_rate_norm]
             else:
 
-                tmp = [x_norm, y_norm, velocity_xy_norm, yaw_rate_norm]
+                tmp = [x_norm, y_norm, yaw_rate_norm]
             if each + 1 != agent.id:
                 state_feature_other = np.append(state_feature_other, tmp)
             else:
@@ -320,7 +325,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         effective_direction_norm_min = effective_direction_min / 360
         effective_direction_norm_max = effective_direction_max / 360
         return np.append(state_feature, [yaw_norm, min_dis_norm, effective_direction_norm_min,
-                                         effective_direction_norm_max, forward_dis_norm, self.init_yaw_degree[agent.id-1]])
+                                         effective_direction_norm_max, forward_dis_norm, self.init_yaw_degree[agent.id-1]]).clip(0, 1)
 
     def is_duplicate(self, agent):
         for each, points in enumerate(self.trajectory_list):
@@ -339,10 +344,12 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
             return True
 
     def _get_reward(self, obs, agent, action):
+        if agent.is_crash:
+            return 0
         reward = 2
-        reward_crash = -300
         reward_outside = -300
-        # if obs[]
+        if obs[4] < 0.05:
+            reward -= np.power((0.05-obs[4]) * 20, 2) * 500
         if self.is_duplicate(agent):
             reward -= 2
         elif self.is_new_area(agent):
@@ -359,10 +366,11 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
 
             # action_cost += yaw_speed_cost
 
-        if self.is_crashed(agent):
-            reward += reward_crash
+        self.is_crashed(agent)
+            # reward += reward_crash
         if self.is_not_inside_workspace(agent):
             reward += reward_outside
+        print(reward)
         return reward
 
     def _get_done(self, agent):
@@ -389,8 +397,8 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
             # 'is_success': agent.is_in_desired_pose(),
             'is_crash': agent.is_crash,
             'is_not_in_workspace': self.is_not_inside_workspace(agent),
-            'step_num': self.current_step
-            # 'individual_reward': reward
+            'step_num': self.current_step,
+            'individual_reward': reward
         }
         return info
 
