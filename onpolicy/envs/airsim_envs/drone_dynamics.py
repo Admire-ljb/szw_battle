@@ -15,6 +15,7 @@ class DroneDynamicsAirsim:
         # self.client.confirmConnection()
         # self.client.enableApiControl(True)
         # self.client.armDisarm(True)
+        self.pose_offset = np.array([[0.0, 0.0], [-72.0, -2], [2, -18], [0, -60], [-30, -23], [-72, -23], [-73, -60]])
         self.client = client
         self.navigation_3d = cfg.getboolean('options', 'navigation_3d')
         self.dt = cfg.getfloat('multirotor', 'dt')
@@ -71,12 +72,19 @@ class DroneDynamicsAirsim:
             #                                high=np.array([self.acc_xy_max, self.yaw_rate_max_rad]),
             #                                dtype=np.float32)
 
-    def reset(self, yaw_degree):
+    def reset(self, yaw_degree, sample_area):
         # self.client.reset()
         # reset goal
         # self.update_goal_pose()
+        pose = self.client.simGetObjectPose(self.name)
+        pose.position.x_val = self.pose_offset[sample_area][0]
+        pose.position.y_val = self.pose_offset[sample_area][1]
+        yaw_noise = math.pi * 2 * np.random.random()
+        pose.orientation = airsim.to_quaternion(0, 0, yaw_noise)
+        self.client.simSetVehiclePose(pose, True, vehicle_name=self.name)
         self.client.enableApiControl(True, vehicle_name=self.name)
         self.client.armDisarm(True, vehicle_name=self.name)
+
         self.is_crash = False
         # reset start
         # yaw_noise = self.start_random_angle * np.random.random()
@@ -230,7 +238,7 @@ class DroneDynamicsAirsim:
         position = self.client.simGetObjectPose(self.name).position
         self.x = position.x_val
         self.y = position.y_val
-        self.z = position.z_val
+        self.z = - position.z_val
         return [position.x_val, position.y_val, -position.z_val]
 
     def get_velocity(self):

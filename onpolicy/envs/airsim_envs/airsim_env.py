@@ -79,21 +79,29 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         self.keyboard_debug = cfg.getboolean('options', 'keyboard_debug')
         self.generate_q_map = cfg.getboolean('options', 'generate_q_map')
         self.world_clock = cfg.getint('options', 'world_clock')
+        self.discrete_grid_x = cfg.getint('options', 'discrete_grid_x')
+        self.discrete_grid_y = cfg.getint('options', 'discrete_grid_y')
         print('Environment: ', self.env_name, "num_of_drones: ", self.num_of_drones)
         self.agents = []
         self.client = airsim.MultirotorClient(ip=cfg.get('options', 'ip'))
         self.trajectory_list = []
+        self.coverage_area = np.zeros(self.discrete_grid_x * self.discrete_grid_x)
         self.cur_state = None
         self.init_pose = []
+        self.client.reset()
         for i in range(self.num_of_drones):
             self.agents.append(DroneDynamicsAirsim(self.cfg, self.client, i + 1))
             self.trajectory_list.append([])
-
+            self.agents[i].reset(self.init_yaw_degree[i], 0)
+            self.init_pose.append(self.client.simGetObjectPose(self.agents[i].name).position)
 
         # TODO cfg
-        self.work_space_x = [-20, 85]
-        self.work_space_y = [-45, 30]
-        self.work_space_z = [-10, 10]
+        self.work_space_x = [-15, 77]
+        self.work_space_y = [-47, 30]
+        self.work_space_z = [-100, 100]
+        self.work_space_x_length = self.work_space_x[1] - self.work_space_x[0]
+        self.work_space_y_length = self.work_space_y[1] - self.work_space_y[0]
+        self.work_space_z_length = self.work_space_z[1] - self.work_space_z[0]
         self.max_episode_steps = 2000
 
         # trainning state
@@ -115,10 +123,11 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
 
         self.action_space = []
         for each in range(self.num_of_drones):
-            self.observation_space.append(spaces.Box(low=0, high=1, shape=(self.state_feature_length + 6, ), dtype=np.float32))
+            self.observation_space.append(spaces.Box(
+                low=0, high=1, shape=(self.state_feature_length + 38 + self.discrete_grid_x * self.discrete_grid_y, ), dtype=np.float32))
             self.action_space.append(self.agents[0].action_space)
         self.share_observation_space = [spaces.Box(
-            low=0, high=1, shape=((self.state_feature_length + 6) * self.num_of_drones, ),
+            low=0, high=1, shape=((self.state_feature_length + 38 + self.discrete_grid_x * self.discrete_grid_y) * self.num_of_drones, ),
             dtype=np.float32) for _ in range(self.num_of_drones)]
 
     def seed(self, seed=None):
@@ -155,6 +164,9 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         # record observation for each agent
         self.cur_state = self.get_all_state()
         for i, agent in enumerate(self.agents):
+            agent.x = self.cur_state[i].position.x_val
+            agent.y = self.cur_state[i].position.y_val
+            agent.z = self.cur_state[i].position.z_val
             _ = self.is_crashed(agent)
             obs_n.append(self._get_obs(agent))
             # print(obs_n[i])
@@ -182,7 +194,9 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         cur_state = []
         for each in self.agents:
             tmp = self.client.getMultirotorState(each.name).kinematics_estimated
-            tmp.position += self.init_pose[each.id - 1]
+            # tmp.position += self.init_pose[each.id - 1]
+            pose = self.client.simGetObjectPose(each.name)
+            tmp.position = pose.position
             cur_state.append(tmp)
         return cur_state
 
@@ -208,7 +222,6 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         if self.navigation_3d:
             self.a_z_n += action_n[:, 0] * self.az_step
             # self.v_z_n += action_n[:, 1] * self.vz_step
-
         else:
             self.a_z_n = np.zeros(self.num_of_drones)
         self.v_z_n += self.a_z_n * self.dt
@@ -280,7 +293,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
 
     def _get_obs(self, agent):
         if agent.is_crash:
-            return np.ones(self.state_feature_length + 6)
+            return np.ones(self.state_feature_length + 38 + self.discrete_grid_x * self.discrete_grid_y)
         state_feature_other = np.array([])
         state_feature_self = np.array([])
         for each in range(self.num_of_drones):
@@ -305,55 +318,61 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
             else:
                 state_feature_self = np.append(state_feature_self, tmp)
         state_feature = np.append(state_feature_self, state_feature_other)
-        min_dis = 1000
-        max_dis = 0
-        effective_direction_min = 0
-        effective_direction_max = 0
-        forward_dis = self.client.getDistanceSensorData("Distance0", agent.name).distance
+        distance_sensors_norm = []
         for each in range(36):
-            tmp = self.client.getDistanceSensorData("Distance"+str(each), agent.name)
-            if tmp.distance < min_dis:
-                min_dis = tmp.distance
-                effective_direction_min = each * 10
-            if tmp.distance > max_dis:
-                max_dis = tmp.max_distance
-                effective_direction_max = each
-        min_dis_norm = min_dis / 40
-        forward_dis_norm = forward_dis / 40
+            distance_sensors_norm.append(self.client.getDistanceSensorData("Distance"+str(each), agent.name).distance / 40)
+        # min_dis = 1000
+        # max_dis = 0
+        # effective_direction_min = 0
+        # effective_direction_max = 0
+        # forward_dis = self.client.getDistanceSensorData("Distance0", agent.name).distance
+        # for each in range(36):
+        #     tmp = self.client.getDistanceSensorData("Distance"+str(each), agent.name)
+        #     if tmp.distance < min_dis:
+        #         min_dis = tmp.distance
+        #         effective_direction_min = each * 10
+        #     if tmp.distance > max_dis:
+        #         max_dis = tmp.max_distance
+        #         effective_direction_max = each
+        # min_dis_norm = min_dis / 40
+        # forward_dis_norm = forward_dis / 40
         yaw = self.cur_state[agent.id-1].orientation.z_val
         yaw_norm = yaw / math.pi / 2 + 0.5
-        effective_direction_norm_min = effective_direction_min / 360
-        effective_direction_norm_max = effective_direction_max / 360
-        return np.append(state_feature, [yaw_norm, min_dis_norm, effective_direction_norm_min,
-                                         effective_direction_norm_max, forward_dis_norm, self.init_yaw_degree[agent.id-1]]).clip(0, 1)
+        # effective_direction_norm_min = effective_direction_min / 360
+        # effective_direction_norm_max = effective_direction_max / 360
+        return np.append(state_feature,
+                         [yaw_norm, self.init_yaw_degree[agent.id - 1]] + distance_sensors_norm + list(self.coverage_area)).clip(0, 1)
 
-    def is_duplicate(self, agent):
-        for each, points in enumerate(self.trajectory_list):
-            if each != agent.id - 1:
-                for point in points:
-                    if judge_dis(point, agent, 1):
-                        return True
-        return False
-
-    def is_new_area(self, agent):
-        for point in self.trajectory_list[agent.id-1]:
-            if judge_dis(point, agent, 1):
-                return False
+    def is_duplicate(self, agent, index):
+        if not self.coverage_area[index] or self.coverage_area[index] == agent.id:
+            return False
         else:
-            self.trajectory_list[agent.id-1].append(agent.get_position())
             return True
+
+    def is_new_area(self, agent, index):
+
+        if not self.coverage_area[index]:
+            self.coverage_area[index] = agent.id
+            return True
+        else:
+            return False
 
     def _get_reward(self, obs, agent, action):
         if agent.is_crash:
             return 0
         reward = 2
-        reward_outside = -300
-        if obs[4] < 0.05:
-            reward -= np.power((0.05-obs[4]) * 20, 2) * 500
-        if self.is_duplicate(agent):
-            reward -= 2
-        elif self.is_new_area(agent):
-            reward += 5
+        reward_outside = -30
+        min_distance = obs[5:41].min()
+        if min_distance < 0.05:
+            reward -= np.power((0.05-min_distance) * 20, 2) * 1000
+        x_index = (agent.x - self.work_space_x[0]) * self.discrete_grid_x // self.work_space_x_length
+        y_index = (agent.y - self.work_space_y[0]) * self.discrete_grid_x // self.work_space_y_length
+        index = x_index * self.discrete_grid_y + y_index
+        index = int(np.clip(index, 0, self.discrete_grid_y * self.discrete_grid_x))
+        if self.is_duplicate(agent, index):
+            reward -= 3
+        elif self.is_new_area(agent, index):
+            reward += 30
             # normalized to 100 according to goal_distance
             # reward_obs = 0
             # action_cost = 0
@@ -406,12 +425,14 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
 
         # reset state
         self.client.reset()
-        self.init_pose = []
+        # self.init_pose = []
         fi = []
+        sample_aera = np.random.randint(7)
+        self.coverage_area = np.zeros(self.discrete_grid_y * self.discrete_grid_x)
+        # sample_aera = 6
         self.client.simPause(False)
         for agent in self.agents:
-            self.init_pose.append(self.client.simGetObjectPose(agent.name).position)
-            fi.append(agent.reset(self.init_yaw_degree[agent.id-1]))
+            fi.append(agent.reset(self.init_yaw_degree[agent.id-1], sample_aera))
         for f in fi:
             f.join()
         self.client.simPause(True)
@@ -437,8 +458,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         Check if the Drone is inside the Workspace defined
         """
         is_not_inside = False
-        current_position = agent.get_position()
-
+        current_position = [agent.x, agent.y, agent.z]
         if current_position[0] < self.work_space_x[0] or current_position[0] > self.work_space_x[1] or \
             current_position[1] < self.work_space_y[0] or current_position[1] > self.work_space_y[1] or \
                 current_position[2] < self.work_space_z[0] or current_position[2] > self.work_space_z[1]:
