@@ -12,16 +12,16 @@ def _cast(x):
 
 class SeparatedReplayBuffer(object):
     def __init__(self, args, obs_space, share_obs_space, act_space):
-        self.episode_length = args.episode_length
-        self.n_rollout_threads = args.n_rollout_threads
-        self.rnn_hidden_size = args.hidden_size
-        self.recurrent_N = args.recurrent_N
-        self.gamma = args.gamma
-        self.gae_lambda = args.gae_lambda
-        self._use_gae = args.use_gae
-        self._use_popart = args.use_popart
-        self._use_valuenorm = args.use_valuenorm
-        self._use_proper_time_limits = args.use_proper_time_limits
+        self.episode_length = int(args.episode_length)
+        self.n_rollout_threads = int(args.n_rollout_threads)
+        self.rnn_hidden_size = int(args.hidden_size)
+        self.recurrent_N = int(args.recurrent_N)
+        self.gamma = float(args.gamma)
+        self.gae_lambda = float(args.gae_lambda)
+        self._use_gae = bool(args.use_gae)
+        self._use_popart = bool(args.use_popart)
+        self._use_valuenorm = bool(args.use_valuenorm)
+        self._use_proper_time_limits = bool(args.use_proper_time_limits)
 
         obs_shape = get_shape_from_obs_space(obs_space)
         share_obs_shape = get_shape_from_obs_space(share_obs_space)

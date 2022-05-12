@@ -67,9 +67,12 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         self.env_name = cfg.get('options', 'env_name')
         self.num_of_drones = cfg.getint('options', 'num_of_drone')
         if self.navigation_3d:
-            self.state_feature_length = 5 * self.num_of_drones
+            # self.state_feature_length = 5 * self.num_of_drones
+            self.state_feature_length = 9
+
         else:
-            self.state_feature_length = 3 * self.num_of_drones
+            self.state_feature_length = 7
+            # self.state_feature_length = 3 * self.num_of_drones
         self.axy_n = np.zeros(self.num_of_drones)
         self.vxy_n = np.zeros(self.num_of_drones)
         self.yaw_acc_n = np.zeros(self.num_of_drones)
@@ -103,7 +106,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         self.work_space_y_length = self.work_space_y[1] - self.work_space_y[0]
         self.work_space_z_length = self.work_space_z[1] - self.work_space_z[0]
         self.max_episode_steps = 2000
-
+        self.center = [sum(self.work_space_x) / 2, sum(self.work_space_y)/2 , sum(self.work_space_z)/ 2]
         # trainning state
         self.episode_num = 0
         self.total_step = 0
@@ -129,6 +132,8 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         self.share_observation_space = [spaces.Box(
             low=0, high=1, shape=((self.state_feature_length + 38 + self.discrete_grid_x * self.discrete_grid_y) * self.num_of_drones, ),
             dtype=np.float32) for _ in range(self.num_of_drones)]
+
+        self.first_assign = 1
 
     def seed(self, seed=None):
         if seed is None:
@@ -293,7 +298,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
 
     def _get_obs(self, agent):
         if agent.is_crash:
-            return np.ones(self.state_feature_length + 38 + self.discrete_grid_x * self.discrete_grid_y)
+            return np.zeros(self.state_feature_length + 38 + self.discrete_grid_x * self.discrete_grid_y)
         state_feature_other = np.array([])
         state_feature_self = np.array([])
         for each in range(self.num_of_drones):
@@ -317,7 +322,13 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
                 state_feature_other = np.append(state_feature_other, tmp)
             else:
                 state_feature_self = np.append(state_feature_self, tmp)
-        state_feature = np.append(state_feature_self, state_feature_other)
+        # state_feature = np.append(state_feature_self, state_feature_other)
+        state_feature = state_feature_self
+        state_feature = np.append(state_feature,
+                                  [(agent.work_space_x[0] - self.work_space_x[0])/self.work_space_x_length,
+                                   (agent.work_space_x[1] - self.work_space_x[0])/self.work_space_x_length,
+                                   (agent.work_space_y[0] - self.work_space_y[0])/self.work_space_y_length,
+                                   (agent.work_space_y[1] - self.work_space_y[0])/ self.work_space_y_length])
         distance_sensors_norm = []
         for each in range(36):
             distance_sensors_norm.append(self.client.getDistanceSensorData("Distance"+str(each), agent.name).distance / 40)
@@ -341,7 +352,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         # effective_direction_norm_min = effective_direction_min / 360
         # effective_direction_norm_max = effective_direction_max / 360
         return np.append(state_feature,
-                         [yaw_norm, self.init_yaw_degree[agent.id - 1]] + distance_sensors_norm + list(self.coverage_area)).clip(0, 1)
+                         [yaw_norm, self.init_yaw_degree[agent.id - 1] / 360] + distance_sensors_norm + list(self.coverage_area)).clip(0, 1)
 
     def is_duplicate(self, agent, index):
         if not self.coverage_area[index] or self.coverage_area[index] == agent.id:
@@ -360,18 +371,18 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
     def _get_reward(self, obs, agent, action):
         if agent.is_crash:
             return 0
-        reward = 2
+        reward = 0
         reward_outside = -30
-        min_distance = obs[5:41].min()
-        if min_distance < 0.05:
+        min_distance = obs[9:45].min()
+        if min_distance < 0.03:
             reward -= np.power((0.05-min_distance) * 20, 2) * 1000
         x_index = (agent.x - self.work_space_x[0]) * self.discrete_grid_x // self.work_space_x_length
         y_index = (agent.y - self.work_space_y[0]) * self.discrete_grid_x // self.work_space_y_length
         index = x_index * self.discrete_grid_y + y_index
         index = int(np.clip(index, 0, self.discrete_grid_y * self.discrete_grid_x))
-        if self.is_duplicate(agent, index):
-            reward -= 3
-        elif self.is_new_area(agent, index):
+        # if self.is_duplicate(agent, index):
+        #     reward -= 3
+        if self.is_new_area(agent, index):
             reward += 30
             # normalized to 100 according to goal_distance
             # reward_obs = 0
@@ -397,8 +408,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         # has_reached_des_pose = agent.is_in_desired_pose()
 
         # We see if we are outside the Learning Space
-        episode_done = is_not_inside_workspace_now or \
-                       agent.is_crash or \
+        episode_done = agent.is_crash or \
                        self.current_step >= self.max_episode_steps
         return episode_done
 
@@ -421,28 +431,98 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         }
         return info
 
+    def assign_area(self):
+        x_left = 0
+        y_left = 0
+        self.agents[0].x, self.agents[0].y, self.agents[0].z = self.agents[0].get_position()
+        self.agents[0].work_space_x = [self.work_space_x[0], self.agents[0].x+7]
+        self.agents[0].work_space_y = [self.work_space_y[0], self.agents[0].y+2]
+        a = [airsim.Vector3r(self.agents[0].work_space_x[0], self.agents[0].work_space_y[0], -self.agents[0].z)]
+        b = [airsim.Vector3r(self.agents[0].work_space_x[0], self.agents[0].work_space_y[1], -self.agents[0].z)]
+        c = [airsim.Vector3r(self.agents[0].work_space_x[1], self.agents[0].work_space_y[1], -self.agents[0].z)]
+        d = [airsim.Vector3r(self.agents[0].work_space_x[1], self.agents[0].work_space_y[0], -self.agents[0].z)]
+
+        self.client.simPlotLineList(a+b+b+c+c+d+d+a, thickness=15.0, color_rgba=[1.0, 0.0, 0.0, 1.0], is_persistent=True)
+
+        self.agents[1].x, self.agents[1].y, self.agents[1].z = self.agents[1].get_position()
+
+        self.agents[1].work_space_x = [self.agents[1].x-1, self.work_space_x[1]]
+        self.agents[1].work_space_y = [self.work_space_y[0], self.agents[1].y+5]
+        a = [airsim.Vector3r(self.agents[1].work_space_x[0], self.agents[1].work_space_y[0], -self.agents[1].z)]
+        b = [airsim.Vector3r(self.agents[1].work_space_x[0], self.agents[1].work_space_y[1], -self.agents[1].z)]
+        c = [airsim.Vector3r(self.agents[1].work_space_x[1], self.agents[1].work_space_y[1], -self.agents[1].z)]
+        d = [airsim.Vector3r(self.agents[1].work_space_x[1], self.agents[1].work_space_y[0], -self.agents[1].z)]
+        self.client.simPlotLineList(a + b + b + c + c + d + d + a, thickness=15.0, color_rgba=[0.0, 1.0, 0.0, 1.0], is_persistent=True)
+        # self.agents[2].x, self.agents[2].y, self.agents[2].z = self.agents[2].get_position()
+        #
+        # self.agents[2].work_space_x = [self.agents[2].x, self.work_space_x[1]]
+        # self.agents[2].work_space_y = [self.agents[2].y-5, self.work_space_y[1]]
+        #
+        # a = [airsim.Vector3r(self.agents[2].work_space_x[0], self.agents[2].work_space_y[0], -self.agents[2].z)]
+        # b = [airsim.Vector3r(self.agents[2].work_space_x[0], self.agents[2].work_space_y[1], -self.agents[2].z)]
+        # c = [airsim.Vector3r(self.agents[2].work_space_x[1], self.agents[2].work_space_y[1], -self.agents[2].z)]
+        # d = [airsim.Vector3r(self.agents[2].work_space_x[1], self.agents[2].work_space_y[0], -self.agents[2].z)]
+        # self.client.simPlotLineList(a + b + b + c + c + d + d + a, thickness=15.0, color_rgba=[0.0, 0.0, 1.0, 1.0], is_persistent=True)
+        #
+        # self.agents[3].x, self.agents[3].y, self.agents[3].z = self.agents[3].get_position()
+        # self.agents[3].work_space_x = [self.work_space_x[0], self.agents[3].x]
+        # self.agents[3].work_space_y = [self.agents[3].y-5, self.work_space_y[1]]
+        # a = [airsim.Vector3r(self.agents[3].work_space_x[0], self.agents[3].work_space_y[0], -self.agents[3].z)]
+        # b = [airsim.Vector3r(self.agents[3].work_space_x[0], self.agents[3].work_space_y[1], -self.agents[3].z)]
+        # c = [airsim.Vector3r(self.agents[3].work_space_x[1], self.agents[3].work_space_y[1], -self.agents[3].z)]
+        # d = [airsim.Vector3r(self.agents[3].work_space_x[1], self.agents[3].work_space_y[0], -self.agents[3].z)]
+        # self.client.simPlotLineList(a + b + b + c + c + d + d + a, thickness=15.0, color_rgba=[1.0, 1.0, 1.0, 1.0], is_persistent=True)
+
+        # i = 0
+        # x_blocks = self.num_of_drones // 2
+        # x_length = self.work_space_x_length / x_blocks
+        # x_start = self.work_space_x[0]
+        # for each in range(x_blocks):
+        #     x_end = x_start + x_length
+        #     self.agents[i].work_space_x = [x_start, x_end]
+        #     self.agents[i].work_space_y = [self.work_space_y[0], self.center[1]]
+        #     x_start = x_end
+        #     i += 1
+        # x_start = self.work_space_x[0]
+        # x_blocks_2 = self.num_of_drones - x_blocks
+        # x_length = self.work_space_x_length / x_blocks_2
+        # for each in range(x_blocks, self.num_of_drones):
+        #     x_end = x_start + x_length
+        #     self.agents[i].work_space_x = [x_start, x_end]
+        #     self.agents[i].work_space_y = [self.center[1], self.work_space_y[1]]
+        #     x_start = x_end
+        #     i += 1
+
     def reset(self):
 
         # reset state
         self.client.reset()
         # self.init_pose = []
         fi = []
-        sample_aera = np.random.randint(7)
+
+        # sample_aera = np.random.randint(8)
         self.coverage_area = np.zeros(self.discrete_grid_y * self.discrete_grid_x)
-        # sample_aera = 6
+
+        sample_aera = 4
         self.client.simPause(False)
         for agent in self.agents:
             fi.append(agent.reset(self.init_yaw_degree[agent.id-1], sample_aera))
+
         for f in fi:
             f.join()
+
+        self.agents[0].is_crash = True
         self.client.simPause(True)
+
         # time.sleep(2/self.world_clock)
         self.cur_state = self.get_all_state()
         self.episode_num += 1
         self.cumulated_episode_reward = np.zeros(self.num_of_drones)
         self.current_step = 0
         self.trajectory_list = []
-
+        if self.first_assign:
+            self.assign_area()
+            self.first_assign = 0
         # time.sleep(2)
         obs_n = []
         for agent in self.agents:
@@ -459,9 +539,9 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         """
         is_not_inside = False
         current_position = [agent.x, agent.y, agent.z]
-        if current_position[0] < self.work_space_x[0] or current_position[0] > self.work_space_x[1] or \
-            current_position[1] < self.work_space_y[0] or current_position[1] > self.work_space_y[1] or \
-                current_position[2] < self.work_space_z[0] or current_position[2] > self.work_space_z[1]:
+        if current_position[0] < agent.work_space_x[0] or current_position[0] > agent.work_space_x[1] or \
+                current_position[1] < agent.work_space_y[0] or current_position[1] > agent.work_space_y[1]:
+                # current_position[2] < agent.work_space_z[0] or current_position[2] > agent.work_space_z[1]:
             is_not_inside = True
 
         return is_not_inside

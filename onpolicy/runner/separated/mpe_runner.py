@@ -33,7 +33,7 @@ class MPERunner(Runner):
                 values, actions, action_log_probs, rnn_states, rnn_states_critic, actions_env = self.collect(step)
                     
                 # Obser reward and next obs
-                obs, rewards, dones, infos = self.envs.step(actions_env)
+                obs, rewards, dones, infos = self.envs.step(actions)
 
                 data = obs, rewards, dones, infos, values, actions, action_log_probs, rnn_states, rnn_states_critic 
                 
@@ -55,7 +55,7 @@ class MPERunner(Runner):
             if episode % self.log_interval == 0:
                 end = time.time()
                 print("\n Scenario {} Algo {} Exp {} updates {}/{} episodes, total num timesteps {}/{}, FPS {}.\n"
-                        .format(self.all_args.scenario_name,
+                        .format("airsim",
                                 self.algorithm_name,
                                 self.experiment_name,
                                 episode,
@@ -115,8 +115,8 @@ class MPERunner(Runner):
             action = _t2n(action)
             # rearrange action
             if self.envs.action_space[agent_id].__class__.__name__ == 'MultiDiscrete':
-                for i in range(self.envs.action_space[agent_id].shape):
-                    uc_action_env = np.eye(self.envs.action_space[agent_id].high[i]+1)[action[:, i]]
+                for i in range(self.envs.action_space[0].shape[0]):
+                    uc_action_env = np.eye(self.envs.action_space[agent_id].nvec[i])[action[:, i]]
                     if i == 0:
                         action_env = uc_action_env
                     else:

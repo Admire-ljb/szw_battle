@@ -16,36 +16,42 @@ def _t2n(x):
 class Runner(object):
     def __init__(self, config):
 
-        self.all_args = config['all_args']
+        self.cfg = config['cfg']
         self.envs = config['envs']
         self.eval_envs = config['eval_envs']
         self.device = config['device']
         self.num_agents = config['num_agents']
+        if config.__contains__("render_envs"):
+            self.render_envs = config['render_envs']
 
         # parameters
-        self.env_name = self.all_args.env_name
-        self.algorithm_name = self.all_args.algorithm_name
-        self.experiment_name = self.all_args.experiment_name
-        self.use_centralized_V = self.all_args.use_centralized_V
-        self.use_obs_instead_of_state = self.all_args.use_obs_instead_of_state
-        self.num_env_steps = self.all_args.num_env_steps
-        self.episode_length = self.all_args.episode_length
-        self.n_rollout_threads = self.all_args.n_rollout_threads
-        self.n_eval_rollout_threads = self.all_args.n_eval_rollout_threads
-        self.use_linear_lr_decay = self.all_args.use_linear_lr_decay
-        self.hidden_size = self.all_args.hidden_size
-        self.use_wandb = self.all_args.use_wandb
-        self.use_render = self.all_args.use_render
-        self.recurrent_N = self.all_args.recurrent_N
+
+        self.env_name = self.cfg.get("options", 'env')
+        self.algorithm_name = self.cfg.get("algorithm", 'algorithm_name')
+        self.experiment_name = self.cfg.get("options", 'env_name')
+        self.use_centralized_V = self.cfg.getboolean("algorithm", 'use_centralized_V')
+        self.use_obs_instead_of_state = self.cfg.getboolean("algorithm", 'use_obs_instead_of_state')
+        self.num_env_steps = self.cfg.getint("algorithm", 'num_env_steps')
+        self.episode_length = self.cfg.getint("algorithm", 'episode_length')
+        self.n_rollout_threads = self.cfg.getint("algorithm", 'n_rollout_threads')
+        self.n_eval_rollout_threads = self.cfg.getint("algorithm", 'n_eval_rollout_threads')
+        self.n_render_rollout_threads = self.cfg.getint("algorithm", 'n_render_rollout_threads')
+        self.use_linear_lr_decay = self.cfg.getboolean("algorithm", 'use_linear_lr_decay')
+        self.hidden_size = self.cfg.getint("algorithm", 'hidden_size')
+        self.use_wandb = self.cfg.getboolean("algorithm", 'use_wandb')
+        self.use_render = self.cfg.getboolean("algorithm", 'use_render')
+        self.recurrent_N = self.cfg.getint("algorithm", 'recurrent_N')
 
         # interval
-        self.save_interval = self.all_args.save_interval
-        self.use_eval = self.all_args.use_eval
-        self.eval_interval = self.all_args.eval_interval
-        self.log_interval = self.all_args.log_interval
+        self.save_interval = self.cfg.getint("algorithm", 'save_interval')
+        self.use_eval = self.cfg.getboolean("algorithm", 'use_eval')
+        self.eval_interval = self.cfg.getint("algorithm", 'eval_interval')
+        self.log_interval = self.cfg.getint("algorithm", 'log_interval')
 
         # dir
-        self.model_dir = self.all_args.model_dir
+        self.model_dir = self.cfg.get("algorithm", 'model_dir')
+        if self.model_dir == '':
+            self.model_dir = None
 
         if self.use_render:
             import imageio
@@ -75,7 +81,7 @@ class Runner(object):
         for agent_id in range(self.num_agents):
             share_observation_space = self.envs.share_observation_space[agent_id] if self.use_centralized_V else self.envs.observation_space[agent_id]
             # policy network
-            po = Policy(self.all_args,
+            po = Policy(self.cfg,
                         self.envs.observation_space[agent_id],
                         share_observation_space,
                         self.envs.action_space[agent_id],
@@ -89,10 +95,10 @@ class Runner(object):
         self.buffer = []
         for agent_id in range(self.num_agents):
             # algorithm
-            tr = TrainAlgo(self.all_args, self.policy[agent_id], device = self.device)
+            tr = TrainAlgo(self.cfg, self.policy[agent_id], device = self.device)
             # buffer
             share_observation_space = self.envs.share_observation_space[agent_id] if self.use_centralized_V else self.envs.observation_space[agent_id]
-            bu = SeparatedReplayBuffer(self.all_args,
+            bu = SeparatedReplayBuffer(self.cfg,
                                        self.envs.observation_space[agent_id],
                                        share_observation_space,
                                        self.envs.action_space[agent_id])

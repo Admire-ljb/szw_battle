@@ -135,7 +135,7 @@ class MPERunner(Runner):
         # rearrange action
         if self.envs.action_space[0].__class__.__name__ == 'MultiDiscrete':
             for i in range(self.envs.action_space[0].shape[0]):
-                uc_actions_env = np.eye(self.envs.action_space[0].nvec[i] + 1)[actions[:, :, i]]
+                uc_actions_env = np.eye(self.envs.action_space[0].nvec[i])[actions[:, :, i]]
                 if i == 0:
                     actions_env = uc_actions_env
                 else:

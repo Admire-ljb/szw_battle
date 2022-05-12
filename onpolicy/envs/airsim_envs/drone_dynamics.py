@@ -15,7 +15,11 @@ class DroneDynamicsAirsim:
         # self.client.confirmConnection()
         # self.client.enableApiControl(True)
         # self.client.armDisarm(True)
-        self.pose_offset = np.array([[0.0, 0.0], [-72.0, -2], [2, -18], [0, -60], [-30, -23], [-72, -23], [-73, -60]])
+        self.pose_offset = np.array([[0.0, 0.0], [-72.0, -2], [2, -18], [0, -60], [-30, -23],
+                                     [-72, -23], [-73, -60], [-25, -50]])
+        self.work_space_x = []
+        self.work_space_y = []
+        self.work_space_z = []
         self.client = client
         self.navigation_3d = cfg.getboolean('options', 'navigation_3d')
         self.dt = cfg.getfloat('multirotor', 'dt')
@@ -79,8 +83,8 @@ class DroneDynamicsAirsim:
         pose = self.client.simGetObjectPose(self.name)
         pose.position.x_val = self.pose_offset[sample_area][0]
         pose.position.y_val = self.pose_offset[sample_area][1]
-        yaw_noise = math.pi * 2 * np.random.random()
-        pose.orientation = airsim.to_quaternion(0, 0, yaw_noise)
+        # yaw_noise = math.pi * 2 * np.random.random()
+        # pose.orientation = airsim.to_quaternion(0, 0, yaw_noise)
         self.client.simSetVehiclePose(pose, True, vehicle_name=self.name)
         self.client.enableApiControl(True, vehicle_name=self.name)
         self.client.armDisarm(True, vehicle_name=self.name)
@@ -107,6 +111,7 @@ class DroneDynamicsAirsim:
         pre_collision_info = self.client.simGetCollisionInfo(vehicle_name=self.name)
         self.goal_distance = self.get_distance_to_goal_2d()
         self.previous_distance_from_des_point = self.goal_distance
+
         return f
 
     def update_goal_pose(self):
