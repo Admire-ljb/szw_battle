@@ -64,7 +64,7 @@ class MPERunner(Runner):
                                 self.num_env_steps,
                                 int(total_num_steps / (end - start))))
 
-                if self.env_name == "MPE":
+                if self.env_name == "airsim":
                     for agent_id in range(self.num_agents):
                         idv_rews = []
                         for info in infos:

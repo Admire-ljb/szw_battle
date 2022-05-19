@@ -28,6 +28,19 @@ def judge_dis(point, agent, dis):
         return False
 
 
+def covered_by_id(cur_n, target_id):
+    cnt = 1
+    while cur_n > 0:
+        a = cur_n % np.power(2, cnt)
+        if a > 0:
+            if a == np.power(2, target_id - 1):
+                return True
+            cur_n -= a
+        if cur_n == np.power(2, target_id - 1):
+            return True
+        cnt += 1
+    return False
+
 class AirSimDroneEnv(gym.Env, QtCore.QThread):
     # action_signal = pyqtSignal(int, np.ndarray) # action: [v_xy, v_z, yaw_rate])
     # state_signal = pyqtSignal(int, np.ndarray) # state_raw: [dist_xy, dist_z, relative_yaw, v_xy, v_z, yaw_rate]
@@ -132,7 +145,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         self.share_observation_space = [spaces.Box(
             low=0, high=1, shape=((self.state_feature_length + 38 + self.discrete_grid_x * self.discrete_grid_y) * self.num_of_drones, ),
             dtype=np.float32) for _ in range(self.num_of_drones)]
-
+        self.wait_step = 10
         self.first_assign = 1
 
     def seed(self, seed=None):
@@ -155,6 +168,9 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         fi = []
         for i, agent in enumerate(self.agents):
             if not agent.is_crash:
+                if i == 0 and self.wait_step > 0:
+                    self.wait_step -= 1
+                    continue
                 fi.append(self._set_action(i, agent))
         for f in fi:
             f.join()
@@ -352,7 +368,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         # effective_direction_norm_min = effective_direction_min / 360
         # effective_direction_norm_max = effective_direction_max / 360
         return np.append(state_feature,
-                         [yaw_norm, self.init_yaw_degree[agent.id - 1] / 360] + distance_sensors_norm + list(self.coverage_area)).clip(0, 1)
+                         [yaw_norm, self.init_yaw_degree[agent.id - 1] / 360] + distance_sensors_norm + list(self.coverage_area/self.num_of_drones)).clip(0, 1)
 
     def is_duplicate(self, agent, index):
         if not self.coverage_area[index] or self.coverage_area[index] == agent.id:
@@ -361,7 +377,6 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
             return True
 
     def is_new_area(self, agent, index):
-
         if not self.coverage_area[index]:
             self.coverage_area[index] = agent.id
             return True
@@ -371,8 +386,8 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
     def _get_reward(self, obs, agent, action):
         if agent.is_crash:
             return 0
-        reward = 0
-        reward_outside = -30
+        reward = 1
+        reward_outside = -10
         min_distance = obs[9:45].min()
         if min_distance < 0.03:
             reward -= np.power((0.05-min_distance) * 20, 2) * 1000
@@ -384,6 +399,29 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         #     reward -= 3
         if self.is_new_area(agent, index):
             reward += 30
+            covered_x = [self.work_space_x[0] + x_index * self.work_space_x_length / self.discrete_grid_x,
+                         self.work_space_x[0] + (x_index+1) * self.work_space_x_length / self.discrete_grid_x]
+            covered_y = [self.work_space_y[0] + y_index * self.work_space_y_length / self.discrete_grid_y,
+                         self.work_space_y[0] + (y_index+1) * self.work_space_y_length / self.discrete_grid_y]
+            a = [airsim.Vector3r(covered_x[0], covered_y[0], -agent.z)]
+            b = [airsim.Vector3r(covered_x[0], covered_y[1], -agent.z)]
+            c = [airsim.Vector3r(covered_x[1], covered_y[1], -agent.z)]
+            d = [airsim.Vector3r(covered_x[1], covered_y[0], -agent.z)]
+            if agent.id == 1:
+                self.client.simPlotLineList(a + b + b + c + c + d + d + a, thickness=15.0, duration=5,
+                                            color_rgba=[1.0, 0.0, 0.0, 1.0],
+                                            is_persistent=False)
+            elif agent.id == 2:
+                self.client.simPlotLineList(a + b + b + c + c + d + d + a, thickness=15.0, duration=5,
+                                            color_rgba=[0.0, 1.0, 0.0, 1.0],
+                                            is_persistent=False)
+            elif agent.id == 3:
+                self.client.simPlotLineList(a + b + b + c + c + d + d + a, thickness=15.0, duration=5,
+                                            color_rgba=[0.0, 0.0, 1.0, 1.0],
+                                            is_persistent=False)
+            else:
+                self.client.simPlotLineList(a + b + b + c + c + d + d + a, thickness=15.0, duration=5, color_rgba=[1.0, 1.0, 1.0, 1.0],
+                                            is_persistent=False)
             # normalized to 100 according to goal_distance
             # reward_obs = 0
             # action_cost = 0
@@ -399,7 +437,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         self.is_crashed(agent)
             # reward += reward_crash
         if self.is_not_inside_workspace(agent):
-            reward += reward_outside
+            reward += reward_outside * np.power(0.75, int(np.log2(self.current_step)))
         print(reward)
         return reward
 
@@ -434,6 +472,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
     def assign_area(self):
         x_left = 0
         y_left = 0
+
         self.agents[0].x, self.agents[0].y, self.agents[0].z = self.agents[0].get_position()
         self.agents[0].work_space_x = [self.work_space_x[0], self.agents[0].x+7]
         self.agents[0].work_space_y = [self.work_space_y[0], self.agents[0].y+2]
@@ -453,25 +492,25 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         c = [airsim.Vector3r(self.agents[1].work_space_x[1], self.agents[1].work_space_y[1], -self.agents[1].z)]
         d = [airsim.Vector3r(self.agents[1].work_space_x[1], self.agents[1].work_space_y[0], -self.agents[1].z)]
         self.client.simPlotLineList(a + b + b + c + c + d + d + a, thickness=15.0, color_rgba=[0.0, 1.0, 0.0, 1.0], is_persistent=True)
-        # self.agents[2].x, self.agents[2].y, self.agents[2].z = self.agents[2].get_position()
-        #
-        # self.agents[2].work_space_x = [self.agents[2].x, self.work_space_x[1]]
-        # self.agents[2].work_space_y = [self.agents[2].y-5, self.work_space_y[1]]
-        #
-        # a = [airsim.Vector3r(self.agents[2].work_space_x[0], self.agents[2].work_space_y[0], -self.agents[2].z)]
-        # b = [airsim.Vector3r(self.agents[2].work_space_x[0], self.agents[2].work_space_y[1], -self.agents[2].z)]
-        # c = [airsim.Vector3r(self.agents[2].work_space_x[1], self.agents[2].work_space_y[1], -self.agents[2].z)]
-        # d = [airsim.Vector3r(self.agents[2].work_space_x[1], self.agents[2].work_space_y[0], -self.agents[2].z)]
-        # self.client.simPlotLineList(a + b + b + c + c + d + d + a, thickness=15.0, color_rgba=[0.0, 0.0, 1.0, 1.0], is_persistent=True)
-        #
-        # self.agents[3].x, self.agents[3].y, self.agents[3].z = self.agents[3].get_position()
-        # self.agents[3].work_space_x = [self.work_space_x[0], self.agents[3].x]
-        # self.agents[3].work_space_y = [self.agents[3].y-5, self.work_space_y[1]]
-        # a = [airsim.Vector3r(self.agents[3].work_space_x[0], self.agents[3].work_space_y[0], -self.agents[3].z)]
-        # b = [airsim.Vector3r(self.agents[3].work_space_x[0], self.agents[3].work_space_y[1], -self.agents[3].z)]
-        # c = [airsim.Vector3r(self.agents[3].work_space_x[1], self.agents[3].work_space_y[1], -self.agents[3].z)]
-        # d = [airsim.Vector3r(self.agents[3].work_space_x[1], self.agents[3].work_space_y[0], -self.agents[3].z)]
-        # self.client.simPlotLineList(a + b + b + c + c + d + d + a, thickness=15.0, color_rgba=[1.0, 1.0, 1.0, 1.0], is_persistent=True)
+        self.agents[2].x, self.agents[2].y, self.agents[2].z = self.agents[2].get_position()
+
+        self.agents[2].work_space_x = [self.agents[2].x-1, self.work_space_x[1]]
+        self.agents[2].work_space_y = [self.agents[2].y-5, self.work_space_y[1]]
+
+        a = [airsim.Vector3r(self.agents[2].work_space_x[0], self.agents[2].work_space_y[0], -self.agents[2].z)]
+        b = [airsim.Vector3r(self.agents[2].work_space_x[0], self.agents[2].work_space_y[1], -self.agents[2].z)]
+        c = [airsim.Vector3r(self.agents[2].work_space_x[1], self.agents[2].work_space_y[1], -self.agents[2].z)]
+        d = [airsim.Vector3r(self.agents[2].work_space_x[1], self.agents[2].work_space_y[0], -self.agents[2].z)]
+        self.client.simPlotLineList(a + b + b + c + c + d + d + a, thickness=15.0, color_rgba=[0.0, 0.0, 1.0, 1.0], is_persistent=True)
+
+        self.agents[3].x, self.agents[3].y, self.agents[3].z = self.agents[3].get_position()
+        self.agents[3].work_space_x = [self.work_space_x[0], self.agents[3].x+1]
+        self.agents[3].work_space_y = [self.agents[3].y-5, self.work_space_y[1]]
+        a = [airsim.Vector3r(self.agents[3].work_space_x[0], self.agents[3].work_space_y[0], -self.agents[3].z)]
+        b = [airsim.Vector3r(self.agents[3].work_space_x[0], self.agents[3].work_space_y[1], -self.agents[3].z)]
+        c = [airsim.Vector3r(self.agents[3].work_space_x[1], self.agents[3].work_space_y[1], -self.agents[3].z)]
+        d = [airsim.Vector3r(self.agents[3].work_space_x[1], self.agents[3].work_space_y[0], -self.agents[3].z)]
+        self.client.simPlotLineList(a + b + b + c + c + d + d + a, thickness=15.0, color_rgba=[1.0, 1.0, 1.0, 1.0], is_persistent=True)
 
         # i = 0
         # x_blocks = self.num_of_drones // 2
@@ -496,6 +535,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
     def reset(self):
 
         # reset state
+        self.wait_step = 10
         self.client.reset()
         # self.init_pose = []
         fi = []
@@ -511,7 +551,9 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         for f in fi:
             f.join()
 
-        self.agents[0].is_crash = True
+        # self.agents[0].is_crash = True
+        # self.agents[1].is_crash = True
+        # self.agents[2].is_crash = True
         self.client.simPause(True)
 
         # time.sleep(2/self.world_clock)
