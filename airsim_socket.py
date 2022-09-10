@@ -12,7 +12,7 @@ class VehicleDict:
         self.addr = addr
         self.socket_client = socket_client
         self.airsim_name = None
-        self.client = None
+        self.client = None # Airsim Client
 
 
 def send_msg(vehicle_class):
