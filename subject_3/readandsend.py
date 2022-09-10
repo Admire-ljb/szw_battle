@@ -1,24 +1,27 @@
 from socket import *
 import threading
-import airsim
 import time
 import numpy as np
+import pandas as pd
 
 connected_port = []
 
 
+UAV_Red_Att = pd.read_table('UAV_Red_Att.txt', sep='\t',engine='python')
+UAV_Red_pos = pd.read_table('UAV_Red_pos.txt', sep='\t',engine='python')
+data = pd.concat([UAV_Red_pos,UAV_Red_Att],axis = 1, join='outer')
+np_data = np.array(data)
+tmp = np.array(['-218.372 483.365 22.367 ', '0.000 4.811 -232.331 '])
+np_data = np.vstack((tmp,np_data))
+
+
 class Sendmsg:
-    def __init__(self, client_ip, socket_server):
-        self.client = airsim.MultirotorClient(client_ip)
+    def __init__(self, socket_server):
         self.buffsize = 2048
         self.s = socket_server
-        # self.s = socket(AF_INET, SOCK_STREAM)
-        # self.s.bind((self.address, port))
-        # self.s.listen(5)  # 最大连接数
         self.conn_list = []
         self.conn_dt = {}
-        self.drone_num = len(self.client.listVehicles())
-        self.drone_list = self.client.listVehicles()
+        self.drone_num = 40
         self.recs()
         # self.t1 = threading.Thread(target=self.recs, args=(), name='rec')
         self.t2 = threading.Thread(target=self.sds, args=(), name='send')
@@ -47,35 +50,34 @@ class Sendmsg:
                 self.conn_list.append(clientaddress)
                 self.conn_dt[clientaddress] = clientsock
                 connected_port.append(clientaddress[1])
-                # gui.listBox.insert(END, clientaddress)
                 print('connect from:', clientaddress)
-                # 在这里创建线程，就可以每次都将socket进行保持
-                # t = threading.Thread(target=self.tcplink, args=(clientsock, clientaddress))
-                # t.start()
 
     def sds(self):
+        k = 0
         while True:
-            for i in range(len(self.conn_dt)):
-                pos = self.client.simGetObjectPose(self.drone_list[i])
-                dpos = pos.position
-                eular = np.rad2deg(airsim.to_eularian_angles(pos.orientation))
-                msg = str(dpos.x_val * 100) + '_' + str(dpos.y_val * 100) + '_' + str(-dpos.z_val * 100) + '_' + \
-                      str(eular[0]) + '_' + str(eular[1]) + '_' + str(eular[2])
+            for i in range(len(self.conn_list)):
+                pos = np_data[i*2601+k][0].split(" ")
+                rpy = np_data[i*2601+k][1].split(" ")
+                msg = '_' + str(float(pos[0])*100) + '_' + str(-float(pos[1])*100) \
+                      + '_' + str(float(pos[2])*100) + '_' + \
+                      rpy[0] + '_' + rpy[1] + '_' + str(float(rpy[2]))
                 # print(msg)
                 self.conn_dt[self.conn_list[i]].sendall(msg.encode('utf-8'))
-            time.sleep(1)
+                # i += 1
+                # if i % 40 == 0:
+                #     i = 0
+            time.sleep(0.01)
+            k += 1
+
 
     def run(self):
-        # self.t1.start()
         self.t2.start()
 
 
 if __name__ == '__main__':
     s = socket(AF_INET, SOCK_STREAM)
-    s.bind(('0.0.0.0', 9999))
+    s.bind(('0.0.0.0', 9000))
     s.listen(200)  # 最大连接数
-    c1 = Sendmsg('192.168.0.107', s)
-    # c1.run()
-    c2 = Sendmsg('192.168.1.100', s)
-    # c1.run()
-    c2.run()
+    c1 = Sendmsg(s)
+    time.sleep(2)
+    c1.run()
