@@ -6,10 +6,10 @@ import configparser
 
 
 class DroneDynamicsAirsim:
-    def __init__(self, cfg, client, id) -> None:
+    def __init__(self, cfg, client, i, name) -> None:
         # config
-        self.id = id
-        self.name = "cf" + str(100 + id)
+        self.id = i
+        self.name = name
         # # AirSim Client
         # self.client = airsim.client.MultirotorClient()
         # self.client.confirmConnection()

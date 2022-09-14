@@ -3,9 +3,10 @@ from tkinter import W
 
 import torch
 from gym.spaces import MultiDiscrete
-
+from socket import *
 from .drone_dynamics import DroneDynamicsAirsim
 import airsim
+from .airsim_socket import CustomAirsimClient
 import gym
 from gym import spaces
 import numpy as np
@@ -49,6 +50,12 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
     # pose_signal = pyqtSignal(np.ndarray, np.ndarray, np.ndarray, np.ndarray)  # goal_pose start_pose current_pose trajectory
     def __init__(self, cfg) -> None:
         super().__init__()
+        self.socket_server = socket(AF_INET, SOCK_STREAM)
+        self.socket_server.bind((cfg.get('options', 'socket_server_ip'), cfg.getint('options', 'socket_server_port')))
+        self.socket_server.listen(200)  # 最大连接数
+
+        self.client = CustomAirsimClient([cfg.get('options', 'ip')], self.socket_server)
+        time.sleep(5)
         np.set_printoptions(formatter={'float': '{: 4.2f}'.format}, suppress=True)
         torch.set_printoptions(profile="short", sci_mode=False, linewidth=1000)
         print("init airsim-gym-env.")
@@ -99,14 +106,15 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         self.discrete_grid_y = cfg.getint('options', 'discrete_grid_y')
         print('Environment: ', self.env_name, "num_of_drones: ", self.num_of_drones)
         self.agents = []
-        self.client = airsim.MultirotorClient(ip=cfg.get('options', 'ip'))
+
         self.trajectory_list = []
         self.coverage_area = np.zeros(self.discrete_grid_x * self.discrete_grid_x)
         self.cur_state = None
         self.init_pose = []
+        self.vehicle_names = self.client.listVehicles()
         self.client.reset()
         for i in range(self.num_of_drones):
-            self.agents.append(DroneDynamicsAirsim(self.cfg, self.client, i + 1))
+            self.agents.append(DroneDynamicsAirsim(self.cfg, self.client, i, self.vehicle_names[i]))
             self.trajectory_list.append([])
             self.agents[i].reset(self.init_yaw_degree[i], 0)
             self.init_pose.append(self.client.simGetObjectPose(self.agents[i].name).position)
@@ -119,7 +127,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         self.work_space_y_length = self.work_space_y[1] - self.work_space_y[0]
         self.work_space_z_length = self.work_space_z[1] - self.work_space_z[0]
         self.max_episode_steps = 2000
-        self.center = [sum(self.work_space_x) / 2, sum(self.work_space_y)/2 , sum(self.work_space_z)/ 2]
+        self.center = [sum(self.work_space_x) / 2, sum(self.work_space_y)/2, sum(self.work_space_z)/ 2]
         # trainning state
         self.episode_num = 0
         self.total_step = 0

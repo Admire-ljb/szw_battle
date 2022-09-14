@@ -351,10 +351,10 @@ while True:
     # agraphic.imshow(img)
     # plt.show()
     # plt.pause(0.01)
-    obs[0] = np.reshape(obs[0], (1, 445))
-    obs[1] = np.reshape(obs[1], (1, 445))
-    obs[2] = np.reshape(obs[2], (1, 445))
-    obs[3] = np.reshape(obs[3], (1, 445))
+    obs[0] = np.reshape(obs[0], (1, 442))
+    obs[1] = np.reshape(obs[1], (1, 442))
+    obs[2] = np.reshape(obs[2], (1, 442))
+    obs[3] = np.reshape(obs[3], (1, 442))
 
     # if envs.agents[0].is_in_desired_pose():
     #
