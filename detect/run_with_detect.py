@@ -145,7 +145,9 @@ from onpolicy.algorithms.r_mappo.algorithm.r_actor_critic import R_Actor, R_Crit
 # matplotlib.use('QtAgg')
 
 ################### detect init end #############################
+
 ################### run model begin #############################
+
 default_cfg = '../onpolicy/envs/airsim_envs/cfg/default.cfg'
 
 
@@ -286,15 +288,15 @@ obs = []
 for i in range(num_agents):
     obs.append(envs._get_obs(envs.agents[i]))
     rnn_states_actor_n.append(rnn_states_actor)
-    obs[i] = np.reshape(obs[i], (1, 43))
+    obs[i] = np.reshape(obs[i], (1, 10))
 
 action_n = np.zeros(num_agents)
 
 clientout = airsim.MultirotorClient(ip=cfg.get('options', 'ip'))
 clientout.enableApiControl(True, 'cf101')
-clientout.enableApiControl(True, 'cf102')
-clientout.enableApiControl(True, 'cf103')
-clientout.enableApiControl(True, 'cf104')
+# clientout.enableApiControl(True, 'cf102')
+# clientout.enableApiControl(True, 'cf103')
+# clientout.enableApiControl(True, 'cf104')
 
 img_rgb_n = [None,None,None,None]
 
@@ -428,7 +430,7 @@ while True:
         hasreach[3] = True
 
     for i in range(num_agents):
-        obs[i] = np.reshape(obs[i], (1, 43))
+        obs[i] = np.reshape(obs[i], (1, 10))
 
 
 

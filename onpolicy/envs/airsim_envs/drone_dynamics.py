@@ -21,6 +21,7 @@ class DroneDynamicsAirsim:
         self.work_space_y = []
         self.work_space_z = []
         self.client = client
+        self.airsim_name = self.client.vehicle_dict[self.name].airsim_name
         self.navigation_3d = cfg.getboolean('options', 'navigation_3d')
         self.dt = cfg.getfloat('multirotor', 'dt')
         # start and goal position
@@ -106,7 +107,8 @@ class DroneDynamicsAirsim:
 
         # take off
         # self.client.moveToZAsync(-self.start_position[2], 2, vehicle_name=self.name)
-        f = self.client.moveByRollPitchYawZAsync(0, 0, np.radians(yaw_degree), -self.start_position[2], 2, vehicle_name=self.name)
+
+        f = self.client.moveByRollPitchYawZAsync(0, 0, np.radians(yaw_degree), -int(self.airsim_name[-1])/3, 2, vehicle_name=self.name)
         # self.client.simPause(True)
         pre_collision_info = self.client.simGetCollisionInfo(vehicle_name=self.name)
         self.goal_distance = self.get_distance_to_goal_2d()
@@ -275,9 +277,12 @@ class DroneDynamicsAirsim:
 
     def is_in_desired_pose(self):
         in_desired_pose = False
-        if self.step < self.accept_radius:
+        if self.get_distance_to_goal_2d() < self.accept_radius:
             in_desired_pose = True
         return in_desired_pose
+
+
+
 
     def is_crashed(self):
         is_crashed = False

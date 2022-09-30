@@ -16,6 +16,7 @@ class VehicleDict:
         self.pose_client = None
 
 
+
 def send_msg(vehicle_class):
     while True:
         pos = vehicle_class.pose_client.simGetObjectPose(vehicle_class.airsim_name)
@@ -25,13 +26,14 @@ def send_msg(vehicle_class):
               str(euler[0]) + '_' + str(euler[1]) + '_' + str(euler[2])
         # print(msg)
         vehicle_class.socket_client.sendall(msg.encode('utf-8'))
-        time.sleep(1)
+        time.sleep(0.1)
 
 
 class CustomAirsimClient:
     def __init__(self, ip_list, socket_server):
         self.airsim_client_list = []
         self.client = airsim.MultirotorClient('127.0.0.1')
+        self.client.ip = '127.0.0.1'
         self.t_main = []
         self.airsim_vehicle_dict = {}
         # socket_server -> socket()
@@ -39,7 +41,10 @@ class CustomAirsimClient:
         self.buff_size = 2048
         for each in ip_list:
             self.airsim_client_list.append(airsim.MultirotorClient(each))
+            self.airsim_client_list[-1].ip = each
             self.airsim_vehicle_dict[self.airsim_client_list[-1]] = self.airsim_client_list[-1].listVehicles()
+        self.airsim_client_list.append(self.client)
+        self.airsim_vehicle_dict[self.airsim_client_list[-1]] = self.airsim_client_list[-1].listVehicles()
         # 连接的ip和端口号
         self.conn_list = []
         # 字典 key：ip+port value: socket_client
@@ -68,7 +73,9 @@ class CustomAirsimClient:
                                     self.vehicle_dict[each].airsim_name = str_tmp
                                     self.vehicle_dict[each].client = tmp_client
                                     self.vehicle_dict[each].pose_client = airsim.MultirotorClient(
-                                        self.vehicle_dict[each].addr[0])
+                                        self.vehicle_dict[each].client.ip)
+                                    self.vehicle_dict[each].pose_client.enableApiControl(
+                                        True,  self.vehicle_dict[each].airsim_name)
                                     self.assigned_blueprint.append(each)
                                     self.airsim_vehicle_dict[tmp_client].remove(str_tmp)
                                     n = 1
@@ -77,12 +84,14 @@ class CustomAirsimClient:
                                     self.t_main[-1].start()
                                     flag = 1
                                     break
-                        if flag:
-                            break
+                            if flag:
+                                break
                     if flag:
                         break
             else:
-                # n *= 2
+                n *= 2
+                if n == 4:
+                    break
                 time.sleep(n)
                 # threading.Timer()
 
@@ -184,6 +193,7 @@ class CustomAirsimClient:
         a = []
         for each in self.airsim_client_list:
             a.append(each.simPause(is_paused))
+        # a.append(self.client.simPause(is_paused))
         return a
 
     def simIsPause(self):
@@ -1110,10 +1120,8 @@ class CustomAirsimClient:
         Returns:
             list[str]: List containing names of all vehicles
         """
-        a = []
-        for each in self.vehicle_dict:
-            a.append(each)
-        return a
+
+        return self.assigned_blueprint
 
     def getSettingsString(self):
         """
@@ -1565,10 +1573,29 @@ class CustomAirsimClient:
 
 if __name__ == '__main__':
     s = socket(AF_INET, SOCK_STREAM)
-    s.bind(('127.0.0.1', 9899))
+    s.bind(('127.0.0.1', 9699))
     s.listen(200)  # 最大连接数
-    client = CustomAirsimClient(['127.0.0.1'], s)
+    client = CustomAirsimClient(["172.18.0.2", "172.18.0.2"], s)
+    dic = {'1': [1, 0],
+           '2': [1, 1],
+           '3': [0, 1],
+           '4': [0, 0]}
+    k = 0
+    time.sleep(2)
+    while True:
+        # client.reset()
+        a = client.listVehicles()
+        x, y = dic[str(k+1)]
+        lista = []
+        for name in a:
+            client.moveToPositionAsync(x, y, -3, 2, vehicle_name=name)
+            # lista.append(client.moveToPositionAsync(
+            #     x+k-10*int(client.vehicle_dict[name].client.ip[-1]), 0, -3, 2, vehicle_name=name))
+        for each in lista:
+            each.join()
 
+        k += 1
+        k %= 4
     # c1.run()
 
     # c1.run()
