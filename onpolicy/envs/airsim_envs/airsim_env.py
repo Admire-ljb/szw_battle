@@ -71,7 +71,6 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         self.velocity_step = cfg.getfloat('options', 'velocity_step')
         self.acc_step = cfg.getfloat('options', 'acc_step')
         self.yaw_step = cfg.getfloat('options', 'yaw_step')
-        self.ayaw_step = cfg.getfloat('options', 'ayaw_step')
         self.vz_step = cfg.getfloat('options', 'vz_step')
         self.az_step = cfg.getfloat('options', 'az_step')
         self.depth_image_request = airsim.ImageRequest('0', airsim.ImageType.DepthPerspective, True, False)
@@ -135,7 +134,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         self.goal_position = [0, 0, 0]
 
         # other settings
-        self.crash_distance = cfg.getint('environment', 'crash_distance')
+        self.avoid_distance = cfg.getint('environment', 'crash_distance') / 40
         self.accept_radius = cfg.getint('environment', 'accept_radius')
         self.max_depth_meters = cfg.getint('environment', 'max_depth_meters')
 
@@ -170,6 +169,8 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         # set action for each agent
         self.compute_velocity(action_n)
         # self.client.simPause(False)
+        # a = time.time()
+
         self.client.simPause(False)
         fi = []
         for i, agent in enumerate(self.agents):
@@ -178,6 +179,9 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         for f in fi:
             f.join()
         self.client.simPause(True)
+        # b = time.time()
+        # print('flying_using_time:',b - a)
+
         # if i % int(1 // self.dt) == 0:
         #     self.trajectory_list[i].append(agent.get_position())
 
@@ -217,6 +221,8 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         if sum(done_n) > 10:
             for i in range(len(done_n)):
                 done_n[i] = 1
+        # print('api_using_time:', time.time() - b)
+
         return obs_n, reward_n, done_n, info_n
 
     def get_all_state(self):
@@ -376,24 +382,26 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
     def _get_reward(self, obs, agent, action):
         if agent.is_crash:
             return 0
-        reward = 2
+        reward = -10
         reward_outside = -30
         min_distance = obs[4:8].min()
-        if min_distance < 0.05:
-            reward -= np.power((0.05-min_distance) * 20, 2) * 1000
+        if min_distance < self.avoid_distance:
+            reward -= np.power((self.avoid_distance-min_distance) * 20, 2) * 800
         distance_now = agent.get_distance_to_goal_2d()
-        reward_distance = (agent.previous_distance_from_des_point - distance_now) * 20  # normalized to 100 according to goal_distance
+        reward_distance = (agent.previous_distance_from_des_point - distance_now) * 100
+        # normalized to 100 according to goal_distance
         agent.previous_distance_from_des_point = distance_now
 
         self.is_crashed(agent)
-            # reward += reward_crash
         if self.is_not_inside_workspace(agent):
             reward += reward_outside
         reward += reward_distance
         if agent.is_in_desired_pose():
-            reward = 50
+            reward = 500
         # print("reward_distance: ",reward_distance)
-        print("reward: ", reward)
+        # print("reward: ", reward)
+        # if reward == -10:
+        #     return self._get_reward( obs, agent, action)
         return reward
 
     def _get_done(self, agent):
@@ -439,11 +447,11 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         # self.init_pose = []
         fi = []
         # self.coverage_area = np.zeros(self.discrete_grid_y * self.discrete_grid_x)
-        # sample_aera = 6
+        sample_aera = 6
         self.client.simPause(False)
         for agent in self.agents:
             # 随机初始位置
-            sample_aera = np.random.randint(0, 7)
+            # sample_aera = np.random.randint(0, 7)
             agent.goal_position = self.goal_position
             fi.append(agent.reset(np.random.randint(0, 360), sample_aera))
         for f in fi:

@@ -21,11 +21,12 @@ class DroneDynamicsAirsim:
         self.work_space_y = []
         self.work_space_z = []
         self.client = client
+
         self.airsim_name = self.client.vehicle_dict[self.name].airsim_name
         self.navigation_3d = cfg.getboolean('options', 'navigation_3d')
         self.dt = cfg.getfloat('multirotor', 'dt')
         # start and goal position
-        self.start_position = [0, 0, 5]
+        self.start_position = [0, 0, 4 + int(self.airsim_name[-1]) / 3]
         self.start_random_angle = None
         self.goal_position = [0, 0, 0]
         self.goal_distance = 10
@@ -107,10 +108,10 @@ class DroneDynamicsAirsim:
 
         # take off
         # self.client.moveToZAsync(-self.start_position[2], 2, vehicle_name=self.name)
-
-        f = self.client.moveByRollPitchYawZAsync(0, 0, np.radians(yaw_degree), -int(self.airsim_name[-1])/3, 2, vehicle_name=self.name)
+        f = self.client.moveByRollPitchYawZAsync(0, 0, np.radians(yaw_degree),  -self.start_position[2], 2, vehicle_name=self.name)
         # self.client.simPause(True)
         pre_collision_info = self.client.simGetCollisionInfo(vehicle_name=self.name)
+        self.get_position()
         self.goal_distance = self.get_distance_to_goal_2d()
         self.previous_distance_from_des_point = self.goal_distance
 
@@ -267,8 +268,8 @@ class DroneDynamicsAirsim:
         return [0.0, 0.0, self.yaw_sp]
 
     def get_distance_to_goal_2d(self):
-        return math.sqrt(pow(self.get_position()[0] - self.goal_position[0], 2) + pow(
-            self.get_position()[1] - self.goal_position[1], 2))
+        return math.sqrt(pow(self.x - self.goal_position[0], 2) + pow(
+            self.y - self.goal_position[1], 2))
 
     def get_distance_to_goal_3d(self):
         current_pose = np.array(self.get_position())

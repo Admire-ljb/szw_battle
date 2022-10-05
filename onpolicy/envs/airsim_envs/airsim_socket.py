@@ -96,6 +96,7 @@ class CustomAirsimClient:
                 # threading.Timer()
 
     def get_info(self, vehicle_name, msg='neighbor'):
+        """ msg = neighbor、 reset 、 crash, etc."""
         self.conn_dt[self.vehicle_dict[vehicle_name].addr].sendall(msg.encode('utf-8'))
         recv_data = self.conn_dt[self.vehicle_dict[vehicle_name].addr].recv(self.buff_size).decode('utf-8')
         return recv_data
@@ -548,7 +549,10 @@ class CustomAirsimClient:
         Returns:
             Pose:
         """
-        return self.client.simGetObjectPose(object_name)
+        if object_name[0:2] == 'cf' or object_name[0:2] == 'uv' or object_name[0:2] == 'fw':
+            return self.vehicle_dict[object_name].client.simGetObjectPose(self.vehicle_dict[object_name].airsim_name)
+        else:
+            return self.client.simGetObjectPose(object_name)
 
     def simSetObjectPose(self, object_name, pose, teleport=True):
         """
