@@ -26,7 +26,7 @@ class DroneDynamicsAirsim:
         self.navigation_3d = cfg.getboolean('options', 'navigation_3d')
         self.dt = cfg.getfloat('multirotor', 'dt')
         # start and goal position
-        self.start_position = [0, 0, 4 + int(self.airsim_name[-1]) / 3]
+        self.start_position = [0, 0, 20 + int(self.airsim_name[-1]) / 3]
         self.start_random_angle = None
         self.goal_position = [0, 0, 0]
         self.goal_distance = 10

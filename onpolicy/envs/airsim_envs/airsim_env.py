@@ -28,15 +28,17 @@ def judge_dis(point, agent, dis):
         return False
 
 
-def plot_target(name, client):
+def plot_target(name, client, color=None):
+    if color is None:
+        color = [1.0, 0.0, 0.0, 1.0]
     getpos = client.simGetObjectPose(name)
     pos = [getpos.position.x_val, getpos.position.y_val, getpos.position.z_val]
-    a = [airsim.Vector3r(pos[0] - 2, pos[1], -5)]
-    b = [airsim.Vector3r(pos[0], pos[1] - 2, -5)]
-    c = [airsim.Vector3r(pos[0] + 2, pos[1], -5)]
-    d = [airsim.Vector3r(pos[0], pos[1] + 2, -5)]
-    client.simPlotLineList(a + b + b + c + c + d + d + a, thickness=15.0, duration=0.5,
-                              color_rgba=[1.0, 0.0, 0.0, 1.0],
+    a = [airsim.Vector3r(pos[0] - 30, pos[1], -5)]
+    b = [airsim.Vector3r(pos[0], pos[1] - 30, -5)]
+    c = [airsim.Vector3r(pos[0] + 30, pos[1], -5)]
+    d = [airsim.Vector3r(pos[0], pos[1] + 30, -5)]
+    client.simPlotLineList(a + b + b + c + c + d + d + a, thickness=550.0, duration=0.5,
+                              color_rgba=color,
                               is_persistent=False)
 
 
@@ -56,7 +58,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         # ip_list =cfg.get('options', 'ip')
 
         self.client = CustomAirsimClient(cfg.get('options', 'ip').split(','), self.socket_server)
-        time.sleep(2)
+        time.sleep(3)
         np.set_printoptions(formatter={'float': '{: 4.2f}'.format}, suppress=True)
         torch.set_printoptions(profile="short", sci_mode=False, linewidth=1000)
         print("init airsim-gym-env.")
@@ -117,8 +119,8 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
             self.init_pose.append(self.client.simGetObjectPose(self.agents[i].name).position)
 
         # TODO cfg
-        self.work_space_x = [-15, 77]
-        self.work_space_y = [-47, 30]
+        self.work_space_x = [-1648, 44]
+        self.work_space_y = [-1438, 564]
         self.work_space_z = [-100, 100]
         self.work_space_x_length = self.work_space_x[1] - self.work_space_x[0]
         self.work_space_y_length = self.work_space_y[1] - self.work_space_y[0]
@@ -134,7 +136,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         self.goal_position = [0, 0, 0]
 
         # other settings
-        self.avoid_distance = cfg.getint('environment', 'crash_distance') / 40
+        self.avoid_distance = cfg.getint('environment', 'crash_distance') / 200
         self.accept_radius = cfg.getint('environment', 'accept_radius')
         self.max_depth_meters = cfg.getint('environment', 'max_depth_meters')
 
@@ -142,8 +144,11 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         self.screen_width = cfg.getint('environment', 'screen_width')
         self.observation_space = []
         self.share_observation_space = []
-        self.goal_name = ['carla_3','claudia2_2','eric_3','manuel_2','nathan2_2','sophia2_2']
-
+        self.goal_name = []
+        self.SceneObjects = self.client.client.simListSceneObjects()
+        for each in self.SceneObjects:
+            if 'people' in each:
+                self.goal_name.append(each)
         self.action_space = []
         for each in range(self.num_of_drones):
             self.observation_space.append(spaces.Box(
@@ -178,7 +183,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
                 fi.append(self._set_action(i, agent))
         for f in fi:
             f.join()
-        self.client.simPause(True)
+        # self.client.simPause(True)
         # b = time.time()
         # print('flying_using_time:',b - a)
 
@@ -231,6 +236,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
             tmp = self.client.getMultirotorState(each.name).kinematics_estimated
             # tmp.position += self.init_pose[each.id - 1]
             pose = self.client.simGetObjectPose(each.name)
+            plot_target(each.name, self.client, [0.0, 1.0, 0.0, 1.0])
             tmp.position = pose.position
             cur_state.append(tmp)
         return cur_state
@@ -337,21 +343,21 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         y_norm = (self.cur_state[index].position.y_val - self.work_space_y[0]) / (
                     self.work_space_y[1] - self.work_space_y[0])
         state_feature = np.array([x_norm, y_norm, yaw_rate_norm])
-        distance_sensors_norm = []
+        distance_sensors = []
         for each in range(36):
-            distance_sensors_norm.append(
-                self.client.getDistanceSensorData("Distance" + str(each), agent.name).distance / 40)
-        distance_fblr = [min(distance_sensors_norm[0:9]),
-                         min(distance_sensors_norm[9:18]),
-                         min(distance_sensors_norm[18:27]),
-                         min(distance_sensors_norm[27:36])]
+            distance_sensors.append(
+                self.client.getDistanceSensorData("Distance" + str(each), agent.name).distance)
+        distance_fblr_norm = [min(distance_sensors[0:9]) / 200,
+                              min(distance_sensors[9:18]) / 200,
+                              min(distance_sensors[18:27]) / 200,
+                              min(distance_sensors[27:36]) / 200]
 
         yaw = airsim.to_eularian_angles(self.cur_state[agent.id - 1].orientation)[2]
         yaw_norm = yaw / math.pi / 2 + 0.5
         # effective_direction_norm_min = effective_direction_min / 360
         # effective_direction_norm_max = effective_direction_max / 360
         tmp = np.append(state_feature,
-                        [yaw_norm] + distance_fblr).clip(0, 1)
+                        [yaw_norm] + distance_fblr_norm).clip(0, 1)
         # distance = agent.get_distance_to_goal_2d()
         # distance_norm = distance / agent.goal_distance
         relative_yaw = agent._get_relative_yaw()
@@ -382,13 +388,15 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
     def _get_reward(self, obs, agent, action):
         if agent.is_crash:
             return 0
-        reward = -10
-        reward_outside = -30
+        reward = 0
+        if action[0] != 5:
+            reward -= 10
+        reward_outside = -80
         min_distance = obs[4:8].min()
         if min_distance < self.avoid_distance:
-            reward -= np.power((self.avoid_distance-min_distance) * 20, 2) * 800
+            reward -= np.power((self.avoid_distance-min_distance) * 16, 2) * 4000
         distance_now = agent.get_distance_to_goal_2d()
-        reward_distance = (agent.previous_distance_from_des_point - distance_now) * 100
+        reward_distance = (agent.previous_distance_from_des_point - distance_now) * 20
         # normalized to 100 according to goal_distance
         agent.previous_distance_from_des_point = distance_now
 
@@ -397,9 +405,9 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
             reward += reward_outside
         reward += reward_distance
         if agent.is_in_desired_pose():
-            reward = 500
+            reward = 2000
         # print("reward_distance: ",reward_distance)
-        # print("reward: ", reward)
+        print("reward: ", reward)
         # if reward == -10:
         #     return self._get_reward( obs, agent, action)
         return reward
@@ -447,7 +455,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         # self.init_pose = []
         fi = []
         # self.coverage_area = np.zeros(self.discrete_grid_y * self.discrete_grid_x)
-        sample_aera = 6
+        sample_aera = 0
         self.client.simPause(False)
         for agent in self.agents:
             # 随机初始位置
