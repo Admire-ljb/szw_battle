@@ -8,6 +8,7 @@ import configparser
 class DroneDynamicsAirsim:
     def __init__(self, cfg, client, i, name) -> None:
         # config
+        self.state_current_attitude = None
         self.id = i
         self.name = name
         # # AirSim Client
@@ -21,12 +22,12 @@ class DroneDynamicsAirsim:
         self.work_space_y = []
         self.work_space_z = []
         self.client = client
-
+        self.last_min_distance = 0
         self.airsim_name = self.client.vehicle_dict[self.name].airsim_name
         self.navigation_3d = cfg.getboolean('options', 'navigation_3d')
         self.dt = cfg.getfloat('multirotor', 'dt')
         # start and goal position
-        self.start_position = [0, 0, 20 + int(self.airsim_name[-1]) / 3]
+        self.start_position = [0, 0, 10 + int(self.airsim_name[-1]) / 3]
         self.start_random_angle = None
         self.goal_position = [0, 0, 0]
         self.goal_distance = 10
@@ -82,6 +83,7 @@ class DroneDynamicsAirsim:
         # self.client.reset()
         # reset goal
         # self.update_goal_pose()
+        self.last_min_distance = 0
         pose = self.client.simGetObjectPose(self.name)
         pose.position.x_val = self.pose_offset[sample_area][0]
         pose.position.y_val = self.pose_offset[sample_area][1]
@@ -163,7 +165,7 @@ class DroneDynamicsAirsim:
         if abs(angle) <= math.pi / 4:
             goal_x = rect[2]
             goal_y = goal_x * math.tan(angle)
-        elif abs(angle) > math.pi / 4 and abs(angle) <= math.pi / 4 * 3:
+        elif math.pi / 4 < abs(angle) <= math.pi / 4 * 3:
             if angle > 0:
                 goal_y = rect[3]
                 goal_x = goal_y / math.tan(angle)
@@ -185,7 +187,7 @@ class DroneDynamicsAirsim:
         '''
 
         distance = self.get_distance_to_goal_2d()
-        relative_yaw = self._get_relative_yaw()  # return relative yaw -pi to pi
+        relative_yaw = self.get_relative_yaw()  # return relative yaw -pi to pi
         relative_pose_z = self.get_position()[2] - self.goal_position[2]  # current position z is positive
         vertical_distance_norm = (relative_pose_z / self.max_vertical_difference / 2 + 0.5) * 255
 
@@ -218,7 +220,7 @@ class DroneDynamicsAirsim:
 
         return state_norm
 
-    def _get_relative_yaw(self):
+    def get_relative_yaw(self):
         '''
         @description: get relative yaw from current pose to goal in radian
         @param {type}

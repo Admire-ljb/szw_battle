@@ -157,6 +157,9 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         self.share_observation_space = [spaces.Box(
             low=0, high=1, shape=(10 * self.num_of_drones, ),
             dtype=np.float32) for _ in range(self.num_of_drones)]
+        self.pre_obs_n = []
+        # for i, agent in enumerate(self.agents):
+        #     self.pre_obs_n.append(self._get_obs(agent))
 
     def seed(self, seed=None):
         if seed is None:
@@ -172,7 +175,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         info_n = []
         plot_target(self.goal_name[self.goal_choose_name], self.client)
         # set action for each agent
-        self.compute_velocity(action_n)
+        indexes = self.compute_velocity(action_n, self.pre_obs_n)
         # self.client.simPause(False)
         # a = time.time()
 
@@ -183,7 +186,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
                 fi.append(self._set_action(i, agent))
         for f in fi:
             f.join()
-        # self.client.simPause(True)
+        self.client.simPause(True)
         # b = time.time()
         # print('flying_using_time:',b - a)
 
@@ -191,7 +194,8 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         #     self.trajectory_list[i].append(agent.get_position())
 
         # time.sleep(0.1 / self.world_clock)
-        # self.client.simPause(True)
+        # self.client.simPause(Tr
+        # ue)
         # advance world state
         # self.world.step()  # core.step()
         # record observation for each agent
@@ -201,19 +205,27 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
             agent.y = self.cur_state[i].position.y_val
             agent.z = self.cur_state[i].position.z_val
             _ = self.is_crashed(agent)
-            obs_n.append(self._get_obs(agent))
-            # print(obs_n[i])
-            done_n.append(self._get_done(agent))
-            reward_n.append(self._get_reward(obs_n[i], agent, action_n[i]))
-            info = self._get_info(agent, reward_n[i])
-            if done_n[i]:
-                print(info)
-            info_n.append(info)
+            if i not in indexes:
+                obs_n.append(self._get_obs(agent))
+                # print(obs_n[i])
+                done_n.append(self._get_done(agent))
+                reward_n.append(self._get_reward(obs_n[i], agent, action_n[i]))
+                info = self._get_info(agent, reward_n[i])
+                if done_n[i]:
+                    print(info)
+                info_n.append(info)
+            else:
+                obs_n.append(self.observation_space[i].low)
+                # print(obs_n[i])
+                done_n.append(False)
+                reward_n.append(0)
+                info_n.append('None')
 
         # for flag in done_n:
         #     if flag:
         #         for each in range(len(done_n)):
         #             done_n[each] = True
+
         self.cumulated_episode_reward += np.array(reward_n)
 
         """all agents get total reward in cooperative case, if shared reward,
@@ -227,7 +239,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
             for i in range(len(done_n)):
                 done_n[i] = 1
         # print('api_using_time:', time.time() - b)
-
+        self.pre_obs_n = obs_n
         return obs_n, reward_n, done_n, info_n
 
     def get_all_state(self):
@@ -241,7 +253,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
             cur_state.append(tmp)
         return cur_state
 
-    def compute_velocity(self, action_n):
+    def compute_velocity(self, action_n, obs_n):
         # yaw_rate_sp_n = action_n[:, -1]
         # if self.navigation_3d:
         #     self.v_z_n = action_n[:, 1].astype('float')
@@ -282,12 +294,25 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
             yaw_n.append(self.agents[each].get_attitude()[2])
         yaw_n = np.array(yaw_n)
         self.yaw_sp_n = yaw_n + self.yaw_acc_n * self.dt
+        indexes = []
+        for each in range(self.num_of_drones):
+            if min(obs_n[each][4:8]) > self.avoid_distance:
+                relative_yaw = self.agents[each].get_relative_yaw()
+                # if relative_yaw > self.yaw_step * 5 / 180 * np.pi:
+                #     relative_yaw = self.yaw_step * 5 / 180 * np.pi
+                # elif relative_yaw < self.yaw_step * 5 / 180 * np.pi:
+                #     relative_yaw = - self.yaw_step * 5 / 180 * np.pi
+                self.yaw_sp_n[each] = relative_yaw + \
+                                      airsim.to_eularian_angles(self.cur_state[each].orientation)[2]
+                indexes.append(each)
         self.yaw_sp_n[self.yaw_sp_n > math.radians(180)] -= math.pi * 2
         self.yaw_sp_n[self.yaw_sp_n < math.radians(-180)] += math.pi * 2
+        print(self.yaw_sp_n[0])
         # self.yaw_sp_n[self.yaw_sp_n > self.yaw_rate_max_rad] = self.yaw_rate_max_rad
         # self.yaw_sp_n[:] = 0
         self.vx_n = self.vxy_n * np.cos(self.yaw_sp_n)
         self.vy_n = self.vxy_n * np.sin(self.yaw_sp_n)
+        return indexes
 
     # set env action for a particular agent
     def _set_action(self, i, agent):
@@ -360,7 +385,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
                         [yaw_norm] + distance_fblr_norm).clip(0, 1)
         # distance = agent.get_distance_to_goal_2d()
         # distance_norm = distance / agent.goal_distance
-        relative_yaw = agent._get_relative_yaw()
+        relative_yaw = agent.get_relative_yaw()
         relative_yaw_norm = (relative_yaw / math.pi / 2 + 0.5)
         tmp = np.append(tmp, relative_yaw_norm).clip(0, 1)
         # agent.
@@ -388,15 +413,22 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
     def _get_reward(self, obs, agent, action):
         if agent.is_crash:
             return 0
-        reward = 0
-        if action[0] != 5:
-            reward -= 10
-        reward_outside = -80
+        reward = 2
+        reward -= 2 * abs(action[0] - 5) / 5 # action cost
+
+        reward_outside = -10
         min_distance = obs[4:8].min()
         if min_distance < self.avoid_distance:
-            reward -= np.power((self.avoid_distance-min_distance) * 16, 2) * 4000
+            # if agent.last_min_distance != 0:
+            #     distance_change = agent.last_min_distance-min_distance
+            #     reward -= distance_change * 4000
+            # else:
+            reward -= np.power((self.avoid_distance-min_distance) * 6.67, 2) * 50
+            # agent.last_min_distance = min_distance
+        # else:
+        #     agent.last_min_distance = 0
         distance_now = agent.get_distance_to_goal_2d()
-        reward_distance = (agent.previous_distance_from_des_point - distance_now) * 20
+        reward_distance = (agent.previous_distance_from_des_point - distance_now) * 2
         # normalized to 100 according to goal_distance
         agent.previous_distance_from_des_point = distance_now
 
@@ -405,7 +437,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
             reward += reward_outside
         reward += reward_distance
         if agent.is_in_desired_pose():
-            reward = 2000
+            reward = 500
         # print("reward_distance: ",reward_distance)
         print("reward: ", reward)
         # if reward == -10:
@@ -413,12 +445,11 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         return reward
 
     def _get_done(self, agent):
-        is_not_inside_workspace_now = self.is_not_inside_workspace(agent)
+        # is_not_inside_workspace_now = self.is_not_inside_workspace(agent)
         has_reached_des_pose = agent.is_in_desired_pose()
 
         # We see if we are outside the Learning Space
-        episode_done = is_not_inside_workspace_now or \
-                       has_reached_des_pose or \
+        episode_done = has_reached_des_pose or \
                        agent.is_crash or \
                        self.current_step >= self.max_episode_steps
         return episode_done
@@ -477,6 +508,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         for agent in self.agents:
             obs_n.append(self._get_obs(agent))
             self.trajectory_list.append([])
+        self.pre_obs_n = obs_n
         return obs_n
 
     # def render(self):

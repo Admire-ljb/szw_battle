@@ -59,6 +59,9 @@ class MPERunner(Runner):
                 record.append(actions)
                 # insert data into buffer
                 self.insert(data)
+                # if sum(dones) == len(dones):
+                #     break
+
 
             # compute return and update network
             self.compute()
