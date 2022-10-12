@@ -83,7 +83,7 @@ def main(arg):
 
     if cfg.get('algorithm', 'algorithm_name') == "rmappo":
         assert cfg.getboolean('algorithm', 'use_recurrent_policy') or cfg.getboolean('algorithm', 'use_naive_recurrent_policy'), ("check recurrent policy!")
-    elif cfg.get('algorithm', 'algorithm_name')  == "mappo":
+    elif cfg.get('algorithm', 'algorithm_name') == "mappo":
         assert cfg.getboolean('algorithm', 'use_recurrent_policy') == False and cfg.getboolean('algorithm', 'use_naive_recurrent_policy') == False, ("check recurrent policy!")
     else:
         raise NotImplementedError
