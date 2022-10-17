@@ -16,7 +16,6 @@ class VehicleDict:
         self.pose_client = None
 
 
-
 def send_msg(vehicle_class):
     while True:
         pos = vehicle_class.pose_client.simGetObjectPose(vehicle_class.airsim_name)
@@ -59,7 +58,7 @@ class CustomAirsimClient:
         self.t2 = threading.Thread(target=self.vehicle_assign, args=())
         self.t2.start()
 
-    def vehicle_assign(self):
+    def  vehicle_assign(self):
         n = 1
         while True:
             flag = 0

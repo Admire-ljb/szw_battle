@@ -27,7 +27,7 @@ class DroneDynamicsAirsim:
         self.navigation_3d = cfg.getboolean('options', 'navigation_3d')
         self.dt = cfg.getfloat('multirotor', 'dt')
         # start and goal position
-        self.start_position = [0, 0, 10 + int(self.airsim_name[-1]) / 3]
+        self.start_position = [0, 0, 5 + int(self.airsim_name[-1]) / 3]
         self.start_random_angle = None
         self.goal_position = [0, 0, 0]
         self.goal_distance = 10
@@ -66,6 +66,7 @@ class DroneDynamicsAirsim:
         self.yaw_rate_max_deg = cfg.getfloat('multirotor', 'yaw_rate_max_deg')
         self.yaw_rate_max_rad = math.radians(self.yaw_rate_max_deg)
         self.max_vertical_difference = 5
+        self.avoid_state = 0
         if self.navigation_3d:
             self.state_feature_length = 6
             # self.action_space = spaces.Box(low=np.array([-self.acc_xy_max, -self.v_z_max, -self.yaw_rate_max_rad]),
@@ -92,7 +93,7 @@ class DroneDynamicsAirsim:
         self.client.simSetVehiclePose(pose, True, vehicle_name=self.name)
         self.client.enableApiControl(True, vehicle_name=self.name)
         self.client.armDisarm(True, vehicle_name=self.name)
-
+        self.avoid_state = 0
         self.is_crash = False
         # reset start
         # yaw_noise = self.start_random_angle * np.random.random()

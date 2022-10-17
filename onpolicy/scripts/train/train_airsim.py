@@ -77,7 +77,7 @@ def main(arg):
     cfg = Myconf()
     cfg.read(arg)
     # os.environ["WANDB_API_KEY"] =
-    # os.environ["WANDB_MODE"] = "offline"
+    os.environ["WANDB_MODE"] = "offline"
     for each in cfg.items("algorithm"):
         cfg.__dict__[each[0]] = each[1]
 
