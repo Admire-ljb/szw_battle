@@ -67,6 +67,7 @@ class DroneDynamicsAirsim:
         self.yaw_rate_max_rad = math.radians(self.yaw_rate_max_deg)
         self.max_vertical_difference = 5
         self.avoid_state = 0
+        self.train_flag = 0
         if self.navigation_3d:
             self.state_feature_length = 6
             # self.action_space = spaces.Box(low=np.array([-self.acc_xy_max, -self.v_z_max, -self.yaw_rate_max_rad]),
@@ -94,6 +95,7 @@ class DroneDynamicsAirsim:
         self.client.enableApiControl(True, vehicle_name=self.name)
         self.client.armDisarm(True, vehicle_name=self.name)
         self.avoid_state = 0
+        self.train_flag = 0
         self.is_crash = False
         # reset start
         # yaw_noise = self.start_random_angle * np.random.random()
@@ -106,12 +108,14 @@ class DroneDynamicsAirsim:
         # pose.orientation = airsim.to_quaternion(0, 0, yaw_noise)
         # self.client.simSetVehiclePose(pose, True, vehicle_name=self.name)
 
-        # self.client.simPause(False)
+        self.client.simPause(False)
         self.step = 0
 
         # take off
         # self.client.moveToZAsync(-self.start_position[2], 2, vehicle_name=self.name)
-        f = self.client.moveByRollPitchYawZAsync(0, 0, np.radians(yaw_degree),  -self.start_position[2], 2, vehicle_name=self.name)
+        f = self.client.moveByRollPitchYawZAsync(0, 0, np.radians(yaw_degree),
+                                                 -self.start_position[2], self.dt, vehicle_name=self.name)
+
         # self.client.simPause(True)
         pre_collision_info = self.client.simGetCollisionInfo(vehicle_name=self.name)
         self.get_position()
@@ -294,6 +298,7 @@ class DroneDynamicsAirsim:
         if collision_info.has_collided:
             is_crashed = True
         return is_crashed
+
 
 if __name__ == '__main__':
     config_file = 'cfg/default.cfg'

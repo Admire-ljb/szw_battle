@@ -45,17 +45,21 @@ class MPERunner(Runner):
 
             for step in range(self.episode_length):
                 # Sample actions
-                values, actions, action_log_probs, rnn_states, rnn_states_critic, actions_env = self.collect(step)
-                    
-                # Obser reward and next obs
+                while True:
+                    values, actions, action_log_probs, rnn_states, rnn_states_critic, actions_env = self.collect(step)
 
-                # action_step = np.zeros([self.num_agents, 2])
-                # for each in range(3 * 2):
-                #     action_step[(actions_env[:, :, each] == 1).reshape(self.num_agents, )] = each
+                    # Obser reward and next obs
 
-                obs, rewards, dones, infos = self.envs.step(actions)
+                    # action_step = np.zeros([self.num_agents, 2])
+                    # for each in range(3 * 2):
+                    #     action_step[(actions_env[:, :, each] == 1).reshape(self.num_agents, )] = each
 
+                    obs, rewards, dones, infos = self.envs.step(actions)
+                    if sum(rewards) != 0:
+                        print(rewards)
+                        break
                 data = obs, rewards, dones, infos, values, actions, action_log_probs, rnn_states, rnn_states_critic
+
                 record.append(actions)
                 # insert data into buffer
                 self.insert(data)
