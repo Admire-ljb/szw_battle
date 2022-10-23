@@ -68,6 +68,8 @@ class DroneDynamicsAirsim:
         self.max_vertical_difference = 5
         self.avoid_state = 0
         self.train_flag = 0
+        self.wait_step = 0
+        self.goal_name = None
         if self.navigation_3d:
             self.state_feature_length = 6
             # self.action_space = spaces.Box(low=np.array([-self.acc_xy_max, -self.v_z_max, -self.yaw_rate_max_rad]),
@@ -82,31 +84,17 @@ class DroneDynamicsAirsim:
             #                                dtype=np.float32)
 
     def reset(self, yaw_degree, sample_area):
-        # self.client.reset()
-        # reset goal
-        # self.update_goal_pose()
+
         self.last_min_distance = 0
         pose = self.client.simGetObjectPose(self.name)
         pose.position.x_val = self.pose_offset[sample_area][0]
         pose.position.y_val = self.pose_offset[sample_area][1]
-        # yaw_noise = math.pi * 2 * np.random.random()
-        # pose.orientation = airsim.to_quaternion(0, 0, yaw_noise)
         self.client.simSetVehiclePose(pose, True, vehicle_name=self.name)
         self.client.enableApiControl(True, vehicle_name=self.name)
         self.client.armDisarm(True, vehicle_name=self.name)
         self.avoid_state = 0
         self.train_flag = 0
         self.is_crash = False
-        # reset start
-        # yaw_noise = self.start_random_angle * np.random.random()
-
-        # set airsim pose
-        # pose = self.client.simGetObjectPose(self.name)
-        # pose.position.x_val = self.start_position[0]
-        # pose.position.y_val = self.start_position[1]
-        # pose.position.z_val = - self.start_position[2]
-        # pose.orientation = airsim.to_quaternion(0, 0, yaw_noise)
-        # self.client.simSetVehiclePose(pose, True, vehicle_name=self.name)
 
         self.client.simPause(False)
         self.step = 0

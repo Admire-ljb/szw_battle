@@ -7,6 +7,19 @@ import time
 import numpy as np
 
 
+def plot_target(pose, client, color=None):
+    if color is None:
+        color = [1.0, 0.0, 0.0, 1.0]
+    pos = [pose.position.x_val, pose.position.y_val, pose.position.z_val]
+    a = [airsim.Vector3r(pos[0] - 20, pos[1], -50)]
+    b = [airsim.Vector3r(pos[0], pos[1] - 20, -50)]
+    c = [airsim.Vector3r(pos[0] + 20, pos[1], -50)]
+    d = [airsim.Vector3r(pos[0], pos[1] + 20, -50)]
+    client.simPlotLineList(a + b + b + c + c + d + d + a, thickness=250.0, duration=0.2,
+                              color_rgba=color,
+                              is_persistent=False)
+
+
 class VehicleDict:
     def __init__(self,  addr, socket_client):
         self.addr = addr
@@ -14,25 +27,35 @@ class VehicleDict:
         self.airsim_name = None
         self.client = None
         self.pose_client = None
+        self.blueprint_client = None
+        self.send_flag = 0
 
 
-def send_msg(vehicle_class):
+def send_msg(vehicle_class, plot_flag=False):
     while True:
-        pos = vehicle_class.pose_client.simGetObjectPose(vehicle_class.airsim_name)
-        d_pos = pos.position
-        euler = np.rad2deg(airsim.to_eularian_angles(pos.orientation))
-        msg = '_' + str(d_pos.x_val * 100) + '_' + str(d_pos.y_val * 100) + '_' + str(-d_pos.z_val * 100) + '_' + \
-              str(euler[0]) + '_' + str(euler[1]) + '_' + str(euler[2])
-        # print(msg)
-        vehicle_class.socket_client.sendall(msg.encode('utf-8'))
+        if vehicle_class.send_flag == 0:
+            pos = vehicle_class.pose_client.simGetObjectPose(vehicle_class.airsim_name)
+            d_pos = pos.position
+            euler = np.rad2deg(airsim.to_eularian_angles(pos.orientation))
+            if plot_flag:
+                plot_target(pos, vehicle_class.blueprint_client)
+            msg = '_' + str(d_pos.x_val * 100) + '_' + str(d_pos.y_val * 100) + '_' + str(-d_pos.z_val * 100) + '_' + \
+                  str(euler[0]) + '_' + str(euler[1]) + '_' + str(euler[2])
+            # print(msg)
+            vehicle_class.socket_client.sendall(msg.encode('utf-8'))
+
+        else:
+            vehicle_class.send_flag = 0
+
         time.sleep(0.1)
 
-
 class CustomAirsimClient:
-    def __init__(self, ip_list, socket_server):
+    def __init__(self, ip_list, socket_server, plot_flag=False):
         self.airsim_client_list = []
+        self.plot_flag = plot_flag
         self.client = airsim.MultirotorClient('127.0.0.1')
         self.client.ip = '127.0.0.1'
+        self.blueprint_ip = '127.0.0.1'
         self.t_main = []
         self.airsim_vehicle_dict = {}
         # socket_server -> socket()
@@ -58,7 +81,7 @@ class CustomAirsimClient:
         self.t2 = threading.Thread(target=self.vehicle_assign, args=())
         self.t2.start()
 
-    def  vehicle_assign(self):
+    def vehicle_assign(self):
         n = 1
         while True:
             flag = 0
@@ -73,13 +96,14 @@ class CustomAirsimClient:
                                     self.vehicle_dict[each].client = tmp_client
                                     self.vehicle_dict[each].pose_client = airsim.MultirotorClient(
                                         self.vehicle_dict[each].client.ip)
+                                    self.vehicle_dict[each].blueprint_client = airsim.MultirotorClient(self.blueprint_ip)
                                     self.vehicle_dict[each].pose_client.enableApiControl(
                                         True,  self.vehicle_dict[each].airsim_name)
                                     self.assigned_blueprint.append(each)
                                     self.airsim_vehicle_dict[tmp_client].remove(str_tmp)
                                     n = 1
                                     self.t_main.append(threading.Thread(target=send_msg,
-                                                                        args=[self.vehicle_dict[each]]))
+                                                                        args=[self.vehicle_dict[each], self.plot_flag]))
                                     self.t_main[-1].start()
                                     flag = 1
                                     break
@@ -96,8 +120,9 @@ class CustomAirsimClient:
 
     def get_info(self, vehicle_name, msg='neighbor'):
         """ msg = neighbor、 reset 、 crash, etc."""
-        self.conn_dt[self.vehicle_dict[vehicle_name].addr].sendall(msg.encode('utf-8'))
-        recv_data = self.conn_dt[self.vehicle_dict[vehicle_name].addr].recv(self.buff_size).decode('utf-8')
+        self.vehicle_dict[vehicle_name].send_flag = 1
+        self.vehicle_dict[vehicle_name].socket_client.sendall(msg.encode('utf-8'))
+        recv_data = self.vehicle_dict[vehicle_name].socket_client.recv(self.buff_size).decode('utf-8')
         return recv_data
 
     def recs(self):
@@ -131,7 +156,7 @@ class CustomAirsimClient:
             a.append(each.ping())
         return a
 
-    def getClientVersion(self):
+    def getClientVersion(self, call_flag =False):
         return 1  # sync with C++ client
 
     def getServerVersion(self):

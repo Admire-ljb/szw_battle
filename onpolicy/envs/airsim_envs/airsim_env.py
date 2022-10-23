@@ -189,14 +189,14 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         # self.client.simPause(False)
         # a = time.time()
 
-        self.client.simPause(False)
+        # self.client.simPause(False)
         fi = []
         for i, agent in enumerate(self.agents):
             if not agent.is_crash:
                 fi.append(self._set_action(i, agent))
-        for f in fi:
-            f.join()
-        self.client.simPause(True)
+        # for f in fi:
+        #     f.join()
+        # self.client.simPause(True)
         # b = time.time()
         # print('flying_using_time:',b - a)
 
@@ -244,9 +244,9 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
             reward_n = [[reward]] * self.num_of_drones
 
         # TODO debug 部分摧毁直接结束场景
-        if sum(done_n) > 10:
-            for i in range(len(done_n)):
-                done_n[i] = 1
+        # if sum(done_n) > 10:
+        #     for i in range(len(done_n)):
+        #         done_n[i] = 1
         # print('api_using_time:', time.time() - b)
         self.pre_obs_n = obs_n
         self.pre_reward = reward_n
@@ -320,10 +320,14 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
                                             yaw_mode=airsim.YawMode(is_rate=False, yaw_or_rate=math.degrees(
                                                self.yaw_sp_n[i])))
         else:
-            return self.client.moveByVelocityZAsync(self.vx_n[i],  self.vy_n[i], - agent.start_position[2], self.dt,
-                                                    vehicle_name=agent.name,
-                                                    drivetrain=airsim.DrivetrainType.ForwardOnly,
-                                                    yaw_mode=airsim.YawMode(is_rate=False))
+            if agent.wait_step > 0:
+                agent.wait_step -= 1
+                return self.client.hoverAsync(agent.name)
+            else:
+                return self.client.moveByVelocityZAsync(self.vx_n[i],  self.vy_n[i], - agent.start_position[2], self.dt,
+                                                        vehicle_name=agent.name,
+                                                        drivetrain=airsim.DrivetrainType.ForwardOnly,
+                                                        yaw_mode=airsim.YawMode(is_rate=False))
             # , yaw_or_rate = math.degrees(self.yaw_sp_n[i])
             # , yaw_or_rate = math.degrees(self.yaw_sp_n[i])
             # print(self.vx_n, self.vy_n, math.degrees(self.yaw_sp_n[0]))
@@ -416,12 +420,12 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
             return 0
         reward = 0
 
-        if obs[0] < self.avoid_distance - 0.15:
+        if min(obs[0:9]) < self.avoid_distance - 0.15:
             # if agent.last_min_distance != 0:
             #     distance_change = agent.last_min_distance-min_distance
             #     reward -= distance_change * 4000
             # else:
-            reward -= np.power((self.avoid_distance-obs[0]) * 5, 2) * 10
+            reward -= np.power((self.avoid_distance-min(obs[0:9])) * 5, 2) * 10
 
         # if agent.avoid_state == 1 and obs[0] > self.avoid_distance:
         #     reward += 2
@@ -485,7 +489,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         fi = []
         # self.coverage_area = np.zeros(self.discrete_grid_y * self.discrete_grid_x)
         sample_aera = 0
-        self.client.simPause(False)
+        # self.client.simPause(False)
         for agent in self.agents:
             # 随机初始位置
             # sample_aera = np.random.randint(0, 7)
@@ -494,7 +498,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         for f in fi:
             f.join()
         time.sleep(2)
-        self.client.simPause(True)
+        # self.client.simPause(True)
         # time.sleep(2/self.world_clock)
         self.cur_state = self.get_all_state()
         self.episode_num += 1
@@ -510,12 +514,12 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
             self.pre_reward.append(0)
             self.trajectory_list.append([])
         self.pre_obs_n = obs_n
-        for _ in range(8):
-            action_n = []
-            for each in self.action_space:
-                action_n.append(each.sample())
-            action_n = np.array(action_n)
-            self.step(action_n)
+        # for _ in range(8):
+        #     action_n = []
+        #     for each in self.action_space:
+        #         action_n.append(each.sample())
+        #     action_n = np.array(action_n)
+        #     self.step(action_n)
         return obs_n
 
     # def render(self):
