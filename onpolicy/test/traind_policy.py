@@ -25,16 +25,15 @@ def _t2n(x):
 
 
 class TrainedPolicy:
-    def __init__(self, file_name,  actor, airsim_env:AirSimDroneEnv):
+    def __init__(self, file_name,  actor, airsim_env: AirSimDroneEnv):
         _ = pd.read_table(file_name, sep='\t', header=None)
         mission_list = []
         for points in _[0]:
             mission_list.append(points.split(" "))
-        self.plot_client = airsim.MultirotorClient('127.0.0.1')
+        # self.plot_client = airsim.MultirotorClient('127.0.0.1')
         self.actor = actor
         self.env = airsim_env
-        self.height = -20
-        self.velocity = 2
+        self.height = -40
         self.destroy_distance = 40
         self.remained_vehicle = self.env.client.assigned_blueprint.copy()
         self.attack_flag = np.zeros(len(self.remained_vehicle), dtype=object)
@@ -48,7 +47,7 @@ class TrainedPolicy:
         self.done_n = None
         self.destroyed_enemy = []
         for agent in self.env.agents:
-            agent.goal_position = self.mission_points[agent.name].data
+            agent.goal_position = self.mission_points[agent.name].data[0:2]
 
         time.sleep(1)
 
@@ -97,11 +96,11 @@ class TrainedPolicy:
             self.env.agents[i].goal_position = [goal[i].x_val, goal[i].y_val, 0]
 
         while not find:
-            time.sleep(1)
+            time.sleep(0.5)
             for i in agent_id_list:
                 enemy_name = enemy_class.remained_vehicle[0]
                 dis = goal[i].distance_to(self.position_list[i])
-                if dis < self.destroy_distance:
+                if dis < self.destroy_distance+40:
                     self.attack_flag[i] = enemy_name
                     self.env.agents[i].goal_name = enemy_name
                     self.destroyed_enemy.append(enemy_name)
@@ -150,10 +149,17 @@ class TrainedPolicy:
         # 持续追踪打击
         for self_id, enemy in enumerate(self.attack_flag):
             if enemy:
-                pose = self.enemy_position[enemy]
+                try:
+                    pose = self.enemy_position[enemy]
+                except KeyError:
+                    self.attack_flag[self_id] = 0
+                    continue
                 self.env.agents[self_id].goal_position[0] = pose.x_val
                 self.env.agents[self_id].goal_position[1] = pose.y_val
-                self.plot_attack(np.array([self_id]), self.env.agents[self_id].goal_name, [0.0, 0.0, 1.0, 1.0])
+                enemy_class.get_caught[enemy] = 1
+                enemy_class.mission_points[enemy].data[0] = 2 * pose.x_val - self.env.agents[self_id].x
+                enemy_class.mission_points[enemy].data[1] = 2 * pose.y_val - self.env.agents[self_id].y
+                self.plot_attack(np.array([self_id]), self.env.agents[self_id].goal_name, '127.0.0.1', color=[0.0, 0.0, 1.0, 1.0])
 
     def get_nearest_enemy(self, i):
         pose1 = self.position_list[i]
@@ -217,12 +223,13 @@ class TrainedPolicy:
             self.detect_destroy_distance(enemy_class)
             time.sleep(1)
 
-    def plot_attack(self, friendly_force, enemy_name, color = None):
+    def plot_attack(self, friendly_force, enemy_name, ip='127.0.0.1', color = None):
         if color is None:
             color = [1.0, 1.0, 0.0, 1.0]
+        plot_client = airsim.MultirotorClient(ip)
         target_pose = self.enemy_position[enemy_name]
         for _ in friendly_force:
-            self.plot_client.simPlotLineList([self.position_list[_], target_pose], thickness=150.0, duration=0.2,
+            plot_client.simPlotLineList([self.position_list[_], target_pose], thickness=50.0, duration=0.2,
                                               color_rgba=color,
                                               is_persistent=False)
             # time.sleep(0.1)
@@ -267,10 +274,11 @@ if __name__ == "__main__":
     actor1 = R_Actor(config['cfg'], config['envs'].observation_space[0], config['envs'].action_space[0], config['device'])
     actor1.load_state_dict(policy_actor_state_dict)
 
-    patrol_drones = FixedPolicy("patrol_20.txt", ['172.19.0.5'], 9699)
-    attack_drones = TrainedPolicy("mission_point.txt", actor1, env)
+    patrol_drones = FixedPolicy("patrol_50.txt", ["127.0.0.1:41451"], 9699)
+    # attack_drones = TrainedPolicy("mission_point.txt", actor1, env)
     patrol_drones.fly_run()
-    attack_drones.fly_run()
-    attack_drones.attack_run(patrol_drones)
+    # attack_drones.fly_run()
+    # while True:
+    #     attack_drones.attack_run(patrol_drones)
 
     # a.fly_run()

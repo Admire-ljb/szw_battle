@@ -27,7 +27,7 @@ class DroneDynamicsAirsim:
         self.navigation_3d = cfg.getboolean('options', 'navigation_3d')
         self.dt = cfg.getfloat('multirotor', 'dt')
         # start and goal position
-        self.start_position = [0, 0, 5 + int(self.airsim_name[-1]) / 3]
+        self.start_position = [0, 0, 10 + int(self.airsim_name[-1]) / 3]
         self.start_random_angle = None
         self.goal_position = [0, 0, 0]
         self.goal_distance = 10
@@ -83,12 +83,12 @@ class DroneDynamicsAirsim:
             #                                high=np.array([self.acc_xy_max, self.yaw_rate_max_rad]),
             #                                dtype=np.float32)
 
-    def reset(self, yaw_degree, sample_area):
+    def reset(self, yaw_degree, x, y):
 
         self.last_min_distance = 0
         pose = self.client.simGetObjectPose(self.name)
-        pose.position.x_val = self.pose_offset[sample_area][0]
-        pose.position.y_val = self.pose_offset[sample_area][1]
+        pose.position.x_val = x
+        pose.position.y_val = y
         self.client.simSetVehiclePose(pose, True, vehicle_name=self.name)
         self.client.enableApiControl(True, vehicle_name=self.name)
         self.client.armDisarm(True, vehicle_name=self.name)
@@ -219,14 +219,14 @@ class DroneDynamicsAirsim:
         @param {type}
         @return:
         '''
-        current_position = self.get_position()
+        current_position = [self.x, self.y, self.z]
         # get relative angle
         relative_pose_x = self.goal_position[0] - current_position[0]
         relative_pose_y = self.goal_position[1] - current_position[1]
         angle = math.atan2(relative_pose_y, relative_pose_x)
 
         # get current yaw
-        yaw_current = self.get_attitude()[2]
+        yaw_current = self.yaw
 
         # get yaw error
         yaw_error = angle - yaw_current

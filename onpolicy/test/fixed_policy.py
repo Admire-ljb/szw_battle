@@ -21,6 +21,17 @@ class RecurrentList(object):
         return self.data[self.ptr], self.data[self.ptr+1]
 
 
+class LinkedNode(object):
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.x_pre = None
+        self.x_next = None
+        self.y_pre = None
+        self.y_next = None
+
+
+
 class FixedPolicy:
     def __init__(self, file_name, ip, port):
         _ = pd.read_table(file_name, sep='\t', header=None)
@@ -31,37 +42,50 @@ class FixedPolicy:
         self.socket_server.bind(('127.0.0.1', port))
         self.socket_server.listen(200)  # 最大连接数
         self.client = CustomAirsimClient(ip, self.socket_server, plot_flag=True)
-        self.height = -20
+        self.height = -10
         self.velocity = 10
         self.destroy_distance = 40
         time.sleep(2)
+        self.get_caught = {}
         self.mission_points = {}
         for mission_point, bp_name in zip(self.patrol_list, self.client.vehicle_dict):
             self.mission_points[bp_name] = RecurrentList(np.array(mission_point, dtype=float)/100)
+            self.get_caught[bp_name] = 0
         time.sleep(1)
         self.remained_vehicle = self.client.listVehicles()
         self.reset()
 
     def reset(self):
-        for bp_name in self.mission_points:
-            pos = airsim.Pose()
-            pos.position.x_val = self.mission_points[bp_name].data[0]
-            pos.position.y_val = self.mission_points[bp_name].data[1]
-            pos.position.z_val = self.height
-            self.client.simSetVehiclePose(pos, ignore_collision=True, vehicle_name=bp_name)
-            self.client.enableApiControl(True, vehicle_name=bp_name)
+        for i in range(5):
+            for bp_name in self.mission_points:
+                pos = airsim.Pose()
+                pos.position.x_val = self.mission_points[bp_name].data[0]
+                pos.position.y_val = self.mission_points[bp_name].data[1]
+                pos.position.z_val = self.height
+                self.client.simSetVehiclePose(pos, ignore_collision=True, vehicle_name=bp_name)
+                self.client.enableApiControl(True, vehicle_name=bp_name)
 
     def fly_patrol(self, bp_name):
         patrol_client = airsim.MultirotorClient(self.client.vehicle_dict[bp_name].client.ip)
         airsim_name = self.client.vehicle_dict[bp_name].airsim_name
         while True:
-            x, y = self.mission_points[bp_name].next()
-            _ = patrol_client.moveToPositionAsync(x,
-                                                  y,
-                                                  self.height, self.velocity, vehicle_name=airsim_name,
-                                                  drivetrain=airsim.DrivetrainType.ForwardOnly,
-                                                  yaw_mode=airsim.YawMode(is_rate=False))
-            _.join()
+            if not self.get_caught[bp_name]:
+                x, y = self.mission_points[bp_name].next()
+
+                _ = patrol_client.moveToPositionAsync(x,
+                                                      y,
+                                                      self.height, self.velocity, vehicle_name=airsim_name,
+                                                      drivetrain=airsim.DrivetrainType.ForwardOnly,
+                                                      yaw_mode=airsim.YawMode(is_rate=False))
+                _.join()
+            else:
+                x, y = self.mission_points[bp_name].data[0], self.mission_points[bp_name].data[1]
+                _ = patrol_client.moveToPositionAsync(x,
+                                                      y,
+                                                      self.height, self.velocity/5, vehicle_name=airsim_name,
+                                                      drivetrain=airsim.DrivetrainType.ForwardOnly,
+                                                      yaw_mode=airsim.YawMode(is_rate=False))
+                time.sleep(1)
 
     def fly_detect(self, bp_name):
         cnt = 0
@@ -96,11 +120,13 @@ class FixedPolicy:
         pose = tmp_client.simGetObjectPose(airsim_name)
         pose.position.x_val = 9999
         pose.position.y_val = 9999
-        tmp_client.simSetVehiclePose(pose, True, vehicle_name=airsim_name)
+        pose.position.z_val = -9999
+        for i in range(10):
+            tmp_client.simSetVehiclePose(pose, True, vehicle_name=airsim_name)
         self.remained_vehicle.remove(bp_name)
 
 
 if __name__ == "__main__":
-    a = FixedPolicy("patrol_20.txt", 9699)
+    a = FixedPolicy("patrol_50.txt", ['127.0.0.1:41451'], 9699)
     time.sleep(1)
     a.fly_run()

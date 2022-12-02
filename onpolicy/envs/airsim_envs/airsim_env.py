@@ -57,7 +57,8 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         self.socket_server.listen(200)  # 最大连接数
         # ip_list =cfg.get('options', 'ip')
 
-        self.client = CustomAirsimClient(cfg.get('options', 'ip').split(','), self.socket_server)
+        self.client = CustomAirsimClient(cfg.get('options', 'ip').split(','), self.socket_server,
+                                         plot_flag=True, plot_color=[0, 1, 0, 1])
         time.sleep(3)
         np.set_printoptions(formatter={'float': '{: 4.2f}'.format}, suppress=True)
         torch.set_printoptions(profile="short", sci_mode=False, linewidth=1000)
@@ -69,6 +70,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         self.data_path = None
         self.shared_reward = False
         self.cfg = cfg
+        self.train_flag = cfg.getboolean('options', 'train_flag')
         self.navigation_3d = cfg.getboolean('options', 'navigation_3d')
         self.velocity_step = cfg.getfloat('options', 'velocity_step')
         self.acc_step = cfg.getfloat('options', 'acc_step')
@@ -116,7 +118,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         for i in range(self.num_of_drones):
             self.agents.append(DroneDynamicsAirsim(self.cfg, self.client, i + 1, self.vehicle_names[i]))
             self.trajectory_list.append([])
-            self.agents[i].reset(np.random.randint(0, 360), 0)
+            self.agents[i].reset(np.random.randint(0, 360), 0, 0)
             self.init_pose.append(self.client.simGetObjectPose(self.agents[i].name).position)
 
         # TODO cfg
@@ -182,7 +184,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         reward_n = []
         done_n = []
         info_n = []
-        plot_target(self.goal_name[self.goal_choose_name], self.client)
+        # plot_target(self.goal_name[self.goal_choose_name], self.client)
         # set action for each agent
 
         self.compute_velocity(action_n, self.pre_obs_n)
@@ -194,47 +196,31 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         for i, agent in enumerate(self.agents):
             if not agent.is_crash:
                 fi.append(self._set_action(i, agent))
-        # for f in fi:
-        #     f.join()
-        # self.client.simPause(True)
-        # b = time.time()
-        # print('flying_using_time:',b - a)
 
-        # if i % int(1 // self.dt) == 0:
-        #     self.trajectory_list[i].append(agent.get_position())
-
-        # time.sleep(0.1 / self.world_clock)
-        # self.client.simPause(Tr
-        # ue)
-        # advance world state
-        # self.world.step()  # core.step()
-        # record observation for each agent
         self.cur_state = self.get_all_state()
         for i, agent in enumerate(self.agents):
             agent.x = self.cur_state[i].position.x_val
             agent.y = self.cur_state[i].position.y_val
             agent.z = self.cur_state[i].position.z_val
+            agent.yaw = agent.get_attitude()[2]
             _ = self.is_crashed(agent)
-            obs_n.append(self._get_obs(agent))
             # print(obs_n[i])
             done_n.append(self._get_done(agent))
+
+        for i, agent in enumerate(self.agents):
+            obs_n.append(self._get_obs(agent, self.train_flag))
+
+        if not self.train_flag and self.client.call_back_is_done():
+            for i, agent in enumerate(self.agents):
+                obs_n[i] = np.append(np.array(self.client.callback_result[agent.name]), obs_n[i]).clip(0, 1)
+        for i, agent in enumerate(self.agents):
             reward_n.append(self._get_reward(obs_n[i], agent, action_n[i]))
             info = self._get_info(agent, reward_n[i])
             if done_n[i]:
                 print(info)
             info_n.append(info)
-            # else:
-            #     obs_n.append(self.observation_space[i].low)
-            #     # print(obs_n[i])
-            #     done_n.append(False)
-            #     reward_n.append(0)
-            #     info_n.append('None')
 
-        # for flag in done_n:
-        #     if flag:
-        #         for each in range(len(done_n)):
-        #             done_n[each] = True
-
+        self.client.empty_call_result()
         self.cumulated_episode_reward += np.array(reward_n)
 
         """all agents get total reward in cooperative case, if shared reward,
@@ -258,7 +244,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
             tmp = self.client.getMultirotorState(each.name).kinematics_estimated
             # tmp.position += self.init_pose[each.id - 1]
             pose = self.client.simGetObjectPose(each.name)
-            plot_target(each.name, self.client, [0.0, 1.0, 0.0, 1.0])
+            # plot_target(each.name, self.client, [0.0, 1.0, 0.0, 1.0])
             tmp.position = pose.position
             cur_state.append(tmp)
         return cur_state
@@ -359,42 +345,27 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
 
         return image_with_state.reshape(-1,)
 
-    def _get_obs(self, agent):
-        # if agent.is_crash:
-        #     return np.ones(9)
-        # index = agent.id - 1
-        # yaw_rate_sp = self.cur_state[index].angular_velocity.z_val
-        # yaw_rate_norm = (yaw_rate_sp / self.yaw_rate_max_rad / 2 + 0.5)
+    def _get_obs(self, agent, train_flag=True):
+        distance_fblr_norm = np.array([])
+        if train_flag:
+            distance_sensors = []
+            for each in range(9):
+                distance_sensors.append(
+                    self.client.getDistanceSensorData("Distance" + str(each), agent.name).distance)
+            for each in range(18, 36):
+                distance_sensors.append(
+                    self.client.getDistanceSensorData("Distance" + str(each), agent.name).distance)
 
-        # x_norm = (self.cur_state[index].position.x_val - self.work_space_x[0]) / (
-        #             self.work_space_x[1] - self.work_space_x[0])
-        # y_norm = (self.cur_state[index].position.y_val - self.work_space_y[0]) / (
-        #             self.work_space_y[1] - self.work_space_y[0])
-        # state_feature = np.array([x_norm, y_norm, yaw_rate_norm])
-        distance_sensors = []
-        for each in range(36):
-            distance_sensors.append(
-                self.client.getDistanceSensorData("Distance" + str(each), agent.name).distance)
-        distance_fblr_norm = np.array([distance_sensors[0:9],
-                                       distance_sensors[18:27],
-                                       distance_sensors[27:36]]) / 200
+            distance_fblr_norm = np.array(distance_sensors) / 200
+        else:
+            for each in range(9):
+                self.client.call_function_async(agent.name, "getDistanceSensorData", "Distance" + str(each), agent.name)
+            for each in range(18, 36):
+                self.client.call_function_async(agent.name, "getDistanceSensorData", "Distance" + str(each), agent.name)
 
-        # yaw = airsim.to_eularian_angles(self.cur_state[agent.id - 1].orientation)[2]
-        # yaw_norm = yaw / math.pi / 2 + 0.5
-        # effective_direction_norm_min = effective_direction_min / 360
-        # effective_direction_norm_max = effective_direction_max / 360
-        # tmp = np.append(state_feature,
-        #                 [yaw_norm] + distance_fblr_norm).clip(0, 1)
-        # distance = agent.get_distance_to_goal_2d()
-        # distance_norm = distance / agent.goal_distance
         relative_yaw = agent.get_relative_yaw()
         relative_yaw_norm = (relative_yaw / math.pi / 2 + 0.5)
         tmp = np.append(distance_fblr_norm, relative_yaw_norm).clip(0, 1)
-        # agent.
-        # goal_norm = [0, 0]
-        # goal_norm[0] = (self.goal_position[0] - self.work_space_x[0]) / (self.work_space_x[1] - self.work_space_x[0])
-        # goal_norm[1] = (self.goal_position[1] - self.work_space_y[0]) / (self.work_space_y[1] - self.work_space_y[0])
-        # goal_norm[2] = (self.goal_position[2] - self.work_space_z[0]) / (self.work_space_z[1] - self.work_space_z[0])
         relative_dis_norm = math.sqrt(pow(self.goal_position[0] - agent.x, 2) +
                                       pow(self.goal_position[1] - agent.x, 2)) / agent.goal_distance
         return np.append(tmp, relative_dis_norm).clip(0, 1)
@@ -488,13 +459,25 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         # self.init_pose = []
         fi = []
         # self.coverage_area = np.zeros(self.discrete_grid_y * self.discrete_grid_x)
-        sample_aera = 0
+        start_position = [-1356.0, -48.0]
+        s = int(np.sqrt(self.num_of_drones))
+        position_list = []
+        for i in range(0, 4 * s, 4):
+            for j in range(0, self.num_of_drones//s * 4, 4):
+                position_list.append([i, j])
+        i = 4*s
+        j = self.num_of_drones//s * 4
+        while len(position_list) < self.num_of_drones:
+            position_list.append([i, j])
+            j += 4
         # self.client.simPause(False)
-        for agent in self.agents:
+        for i, agent in enumerate(self.agents):
             # 随机初始位置
             # sample_aera = np.random.randint(0, 7)
             agent.goal_position = self.goal_position
-            fi.append(agent.reset(np.random.randint(0, 360), sample_aera))
+            fi.append(agent.reset(np.random.randint(0, 360),
+                                  start_position[0] + position_list[i][0],
+                                  start_position[1] + position_list[i][1]))
         for f in fi:
             f.join()
         time.sleep(2)

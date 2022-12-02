@@ -6,22 +6,31 @@ from airsim.client import *
 import time
 import numpy as np
 
+# import socket
+
+
+def get_free_port():
+    sock = socket()
+    sock.bind(('', 0))
+    ip, port = sock.getsockname()
+    sock.close()
+    return port
 
 def plot_target(pose, client, color=None):
     if color is None:
         color = [1.0, 0.0, 0.0, 1.0]
     pos = [pose.position.x_val, pose.position.y_val, pose.position.z_val]
-    a = [airsim.Vector3r(pos[0] - 20, pos[1], -50)]
-    b = [airsim.Vector3r(pos[0], pos[1] - 20, -50)]
-    c = [airsim.Vector3r(pos[0] + 20, pos[1], -50)]
-    d = [airsim.Vector3r(pos[0], pos[1] + 20, -50)]
-    client.simPlotLineList(a + b + b + c + c + d + d + a, thickness=250.0, duration=0.2,
-                              color_rgba=color,
-                              is_persistent=False)
+    a = [airsim.Vector3r(pos[0] - 10, pos[1], -50)]
+    b = [airsim.Vector3r(pos[0], pos[1] - 10, -50)]
+    c = [airsim.Vector3r(pos[0] + 10, pos[1], -50)]
+    d = [airsim.Vector3r(pos[0], pos[1] + 10, -50)]
+    client.simPlotLineList(a + b + b + c + c + d + d + a, thickness=150.0, duration=0.2,
+                           color_rgba=color,
+                           is_persistent=False)
 
 
 class VehicleDict:
-    def __init__(self,  addr, socket_client):
+    def __init__(self, addr, socket_client):
         self.addr = addr
         self.socket_client = socket_client
         self.airsim_name = None
@@ -29,16 +38,17 @@ class VehicleDict:
         self.pose_client = None
         self.blueprint_client = None
         self.send_flag = 0
+        self.send_client = None
 
 
-def send_msg(vehicle_class, plot_flag=False):
+def send_msg(vehicle_class, plot_flag=False, color=None):
     while True:
         if vehicle_class.send_flag == 0:
             pos = vehicle_class.pose_client.simGetObjectPose(vehicle_class.airsim_name)
             d_pos = pos.position
             euler = np.rad2deg(airsim.to_eularian_angles(pos.orientation))
             if plot_flag:
-                plot_target(pos, vehicle_class.blueprint_client)
+                plot_target(pos, vehicle_class.blueprint_client, color)
             msg = '_' + str(d_pos.x_val * 100) + '_' + str(d_pos.y_val * 100) + '_' + str(-d_pos.z_val * 100) + '_' + \
                   str(euler[0]) + '_' + str(euler[1]) + '_' + str(euler[2])
             # print(msg)
@@ -46,27 +56,32 @@ def send_msg(vehicle_class, plot_flag=False):
 
         else:
             vehicle_class.send_flag = 0
-
         time.sleep(0.1)
 
+
 class CustomAirsimClient:
-    def __init__(self, ip_list, socket_server, plot_flag=False):
+    def __init__(self, ip_list, socket_server, plot_flag=False, plot_color=None):
         self.airsim_client_list = []
         self.plot_flag = plot_flag
+        self.plot_color = plot_color
         self.client = airsim.MultirotorClient('127.0.0.1')
         self.client.ip = '127.0.0.1'
         self.blueprint_ip = '127.0.0.1'
+
         self.t_main = []
         self.airsim_vehicle_dict = {}
         # socket_server -> socket()
         self.socket_server = socket_server
-        self.buff_size = 2048
-        for each in ip_list:
-            self.airsim_client_list.append(airsim.MultirotorClient(each))
-            self.airsim_client_list[-1].ip = each
+        self.buff_size = 1024
+        for ip_port in ip_list:
+            ip, port = ip_port.split(':')
+            self.airsim_client_list.append(airsim.MultirotorClient(ip, int(port)))
+            self.airsim_client_list[-1].ip = ip
+            self.airsim_client_list[-1].port = int(port)
             self.airsim_vehicle_dict[self.airsim_client_list[-1]] = self.airsim_client_list[-1].listVehicles()
-        self.airsim_client_list.append(self.client)
-        self.airsim_vehicle_dict[self.airsim_client_list[-1]] = self.airsim_client_list[-1].listVehicles()
+
+        # self.airsim_client_list.append(self.client)
+        # self.airsim_vehicle_dict[self.airsim_client_list[-1]] = self.airsim_client_list[-1].listVehicles()
         # 连接的ip和端口号
         self.conn_list = []
         # 字典 key：ip+port value: socket_client
@@ -75,11 +90,81 @@ class CustomAirsimClient:
         # 已分配好airsim节点的blueprint vehicle
         self.assigned_blueprint = []
         # 字典 key: blueprint name  value: vehicle_dict class
+        # parallel_call_back
+        self.conn_list_call_back = []
+        self.conn_dt_call_back = {}
+        local_ip = '127.0.0.1'
+        local_port = get_free_port()
+
+        self.t3 = threading.Thread(target=self.call_back_tcp_server, args=(local_ip, local_port), name='rec')
+        self.t3.start()
+        self.call_back_send_list = {}
+        for ip_port in ip_list:
+            self.call_back_send_list[ip_port] = socket(AF_INET, SOCK_STREAM)
+            self.call_back_send_list[ip_port].connect((local_ip, local_port))
+        self.callback_result = {}
+        self.call_back_done = 0
+        self.call_back_send = 0
         self.vehicle_dict = {}
         self.t = threading.Thread(target=self.recs, args=())
         self.t.start()
         self.t2 = threading.Thread(target=self.vehicle_assign, args=())
         self.t2.start()
+
+    def call_back_tcp_server(self, local_ip, local_port):
+        local_buff_size = 1024
+        call_back_socket_server = socket(AF_INET, SOCK_STREAM)
+        call_back_socket_server.bind((local_ip, local_port))
+        call_back_socket_server.listen(50)  # 最大连接数
+        while True:
+            clientsock, client_address = call_back_socket_server.accept()
+            if client_address not in self.conn_list_call_back:
+                self.conn_list_call_back.append(client_address)
+                self.conn_dt_call_back[client_address] = clientsock
+            print('connect from:', client_address)
+            t = threading.Thread(target=self.call_back, args=(clientsock, client_address, local_buff_size))
+            t.start()
+
+    def call_back(self, sock, addr, buff_size):
+        """
+        处理airsim env 发送的函数以及参数请求 并存储数据
+        """
+        tmp_list = ''
+        while True:
+            try:
+                recv_data = sock.recv(buff_size).decode('utf-8')
+                if tmp_list:
+                    recv_data = tmp_list + recv_data
+                recv_list = recv_data.split('#')
+                tmp_list = recv_list.pop(-1)
+                for cmds in recv_list:
+                    cmd_list = cmds.split('|')
+                    object_name = cmd_list[0]
+                    func = cmd_list[1]
+                    args = []
+                    for i in range(2, len(cmd_list)):
+                        args.append(cmd_list[i])
+                    data = eval("self."+func)(*args)
+                    if func == 'getDistanceSensorData':
+                        data = data.distance / 200
+                    self.callback_result[object_name].append(data)
+                    self.call_back_done += 1
+            except:
+                sock.close()
+                print(addr, 'offline')
+                break
+
+    def empty_call_result(self):
+        for bp_name in self.callback_result:
+            self.callback_result[bp_name] = []
+
+    def call_back_is_done(self):
+        while True:
+            time.sleep(0.1)
+            if self.call_back_done == self.call_back_send:
+                self.call_back_done = 0
+                self.call_back_send = 0
+                return True
 
     def vehicle_assign(self):
         n = 1
@@ -95,15 +180,19 @@ class CustomAirsimClient:
                                     self.vehicle_dict[each].airsim_name = str_tmp
                                     self.vehicle_dict[each].client = tmp_client
                                     self.vehicle_dict[each].pose_client = airsim.MultirotorClient(
-                                        self.vehicle_dict[each].client.ip)
-                                    self.vehicle_dict[each].blueprint_client = airsim.MultirotorClient(self.blueprint_ip)
+                                        self.vehicle_dict[each].client.ip, self.vehicle_dict[each].client.port)
+                                    self.vehicle_dict[each].send_client = self.call_back_send_list[self.vehicle_dict[each].client.ip + ':' + str(self.vehicle_dict[each].client.port)]
+                                    self.vehicle_dict[each].blueprint_client = airsim.MultirotorClient(
+                                        self.blueprint_ip)
                                     self.vehicle_dict[each].pose_client.enableApiControl(
-                                        True,  self.vehicle_dict[each].airsim_name)
+                                        True, self.vehicle_dict[each].airsim_name)
                                     self.assigned_blueprint.append(each)
                                     self.airsim_vehicle_dict[tmp_client].remove(str_tmp)
+                                    self.callback_result[each] = []
                                     n = 1
                                     self.t_main.append(threading.Thread(target=send_msg,
-                                                                        args=[self.vehicle_dict[each], self.plot_flag]))
+                                                                        args=[self.vehicle_dict[each], self.plot_flag,
+                                                                              self.plot_color]))
                                     self.t_main[-1].start()
                                     flag = 1
                                     break
@@ -156,7 +245,7 @@ class CustomAirsimClient:
             a.append(each.ping())
         return a
 
-    def getClientVersion(self, call_flag =False):
+    def getClientVersion(self, call_flag=False):
         return 1  # sync with C++ client
 
     def getServerVersion(self):
@@ -365,6 +454,7 @@ class CustomAirsimClient:
         # image_type uses one of the ImageType members
 
     def simGetImage(self, camera_name, image_type, vehicle_name='', external=False):
+
         """
         Get a single image
         Returns bytes of png format image which can be dumped into abinary file to create .png image
@@ -378,7 +468,7 @@ class CustomAirsimClient:
         Returns:
             Binary string literal of compressed png image
         """
-        return self.vehicle_dict[vehicle_name]\
+        return self.vehicle_dict[vehicle_name] \
             .client.simGetImage(
             camera_name, image_type, self.vehicle_dict[vehicle_name].airsim_name, external)
         # camera control
@@ -423,7 +513,7 @@ class CustomAirsimClient:
                                                  self.vehicle_dict[vehicle_name].airsim_name, external)
 
     def simGetFilmbackSettings(self, camera_name, vehicle_name='', external=False):
-        return self.vehicle_dict[vehicle_name]\
+        return self.vehicle_dict[vehicle_name] \
             .client.simGetFilmbackSettings(camera_name, self.vehicle_dict[vehicle_name].airsim_name, external)
 
     def simSetFilmbackSettings(self, sensor_width, sensor_height, camera_name, vehicle_name='', external=False):
@@ -467,6 +557,7 @@ class CustomAirsimClient:
             camera_name, self.vehicle_dict[vehicle_name].airsim_name, external)
 
         # End CinemAirSim
+
     def simTestLineOfSightToPoint(self, point, vehicle_name=''):
         """
         Returns whether the target point is visible from the perspective of the inputted vehicle
@@ -565,14 +656,16 @@ class CustomAirsimClient:
         self.vehicle_dict[vehicle_name].client.simSetTraceLine(color_rgba,
                                                                thickness, self.vehicle_dict[vehicle_name].airsim_name)
 
+    def call_function_async(self, object_name, function_name, *args):
+        msg = object_name + '|' + function_name
+        for arg in args:
+            msg = msg + '|' + str(arg)
+        msg += '#'
+        self.vehicle_dict[object_name].send_client.send(msg.encode())
+        self.call_back_send += 1
+        return True
+
     def simGetObjectPose(self, object_name):
-        """
-        The position inside the returned Pose is in the world frame
-        Args:
-            object_name (str): Object to get the Pose of
-        Returns:
-            Pose:
-        """
         if object_name[0:2] == 'cf' or object_name[0:2] == 'uv' or object_name[0:2] == 'fw':
             return self.vehicle_dict[object_name].client.simGetObjectPose(self.vehicle_dict[object_name].airsim_name)
         else:
@@ -891,7 +984,8 @@ class CustomAirsimClient:
         Returns:
             EnvironmentState: Ground truth environment state
         """
-        return self.vehicle_dict[vehicle_name].client.simGetGroundTruthEnvironment(self.vehicle_dict[vehicle_name].airsim_name)
+        return self.vehicle_dict[vehicle_name].client.simGetGroundTruthEnvironment(
+            self.vehicle_dict[vehicle_name].airsim_name)
 
     simGetGroundTruthEnvironment.__annotations__ = {'return': EnvironmentState}
 
@@ -1171,7 +1265,8 @@ class CustomAirsimClient:
         Returns:
             msgpackrpc.future.Future: future. call .join() to wait for method to finish. Example: client.METHOD().join()
         """
-        return self.vehicle_dict[vehicle_name].client.takeoffAsynck(timeout_sec, self.vehicle_dict[vehicle_name].airsim_name)
+        return self.vehicle_dict[vehicle_name].client.takeoffAsynck(timeout_sec,
+                                                                    self.vehicle_dict[vehicle_name].airsim_name)
 
     def landAsync(self, timeout_sec=60, vehicle_name=''):
         """
@@ -1236,7 +1331,7 @@ class CustomAirsimClient:
 
     def moveByAngleZAsync(self, pitch, roll, z, yaw, duration, vehicle_name=''):
         logging.warning("moveByAngleZAsync API is deprecated, use moveByRollPitchYawZAsync() API instead")
-        return self.vehicle_dict[vehicle_name].client.moveByRollPitchYawZ(pitch, roll, z,  yaw, duration,
+        return self.vehicle_dict[vehicle_name].client.moveByRollPitchYawZ(pitch, roll, z, yaw, duration,
                                                                           self.vehicle_dict[vehicle_name].airsim_name)
 
     def moveByAngleThrottleAsync(self, pitch, roll, throttle, yaw_rate, duration, vehicle_name=''):
@@ -1278,16 +1373,17 @@ class CustomAirsimClient:
                             yaw_mode=YawMode(),
                             lookahead=-1, adaptive_lookahead=1, vehicle_name=''):
         return self.vehicle_dict[vehicle_name].client.moveToPositionAsync(
-                    x, y, z, velocity, timeout_sec, drivetrain, yaw_mode, lookahead,
-                    adaptive_lookahead, self.vehicle_dict[vehicle_name].airsim_name)
+            x, y, z, velocity, timeout_sec, drivetrain, yaw_mode, lookahead,
+            adaptive_lookahead, self.vehicle_dict[vehicle_name].airsim_name)
 
     def moveToGPSAsync(self, latitude, longitude, altitude, velocity, timeout_sec=3e+38,
                        drivetrain=DrivetrainType.MaxDegreeOfFreedom, yaw_mode=YawMode(),
                        lookahead=-1, adaptive_lookahead=1, vehicle_name=''):
         return self.vehicle_dict[vehicle_name].client.moveToGPSAsync(latitude, longitude,
-                                                              altitude, velocity, timeout_sec, drivetrain, yaw_mode,
-                                                              lookahead, adaptive_lookahead,
-                                                              self.vehicle_dict[vehicle_name].airsim_name)
+                                                                     altitude, velocity, timeout_sec, drivetrain,
+                                                                     yaw_mode,
+                                                                     lookahead, adaptive_lookahead,
+                                                                     self.vehicle_dict[vehicle_name].airsim_name)
 
     def moveToZAsync(self, z, velocity, timeout_sec=3e+38, yaw_mode=YawMode(), lookahead=-1, adaptive_lookahead=1,
                      vehicle_name=''):
@@ -1319,11 +1415,11 @@ class CustomAirsimClient:
 
     def rotateToYawAsync(self, yaw, timeout_sec=3e+38, margin=5, vehicle_name=''):
         return self.vehicle_dict[vehicle_name].client.rotateToYawAsync(
-            yaw, timeout_sec, margin,  self.vehicle_dict[vehicle_name].airsim_name)
+            yaw, timeout_sec, margin, self.vehicle_dict[vehicle_name].airsim_name)
 
     def rotateByYawRateAsync(self, yaw_rate, duration, vehicle_name=''):
         return self.vehicle_dict[vehicle_name].client.rotateByYawRateAsync(
-            yaw_rate, duration,  self.vehicle_dict[vehicle_name].airsim_name)
+            yaw_rate, duration, self.vehicle_dict[vehicle_name].airsim_name)
 
     def hoverAsync(self, vehicle_name=''):
         return self.vehicle_dict[vehicle_name].client.hoverAsync(self.vehicle_dict[vehicle_name].airsim_name)
@@ -1561,7 +1657,8 @@ class CustomAirsimClient:
                 - Modifying velocity controller gains will have an affect on the behaviour of moveOnSplineAsync() and moveOnSplineVelConstraintsAsync(), as they both use velocity control to track the trajectory.
             vehicle_name (str, optional): Name of the multirotor to send this command to
         """
-        self.vehicle_dict[vehicle_name].client.setVelocityControllerGains(velocity_gains, self.vehicle_dict[vehicle_name].airsim_name)
+        self.vehicle_dict[vehicle_name].client.setVelocityControllerGains(velocity_gains,
+                                                                          self.vehicle_dict[vehicle_name].airsim_name)
 
     def setPositionControllerGains(self, position_gains=PositionControllerGains(), vehicle_name=''):
         """
@@ -1573,7 +1670,8 @@ class CustomAirsimClient:
                 - Pass PositionControllerGains() to reset gains to default recommended values.
             vehicle_name (str, optional): Name of the multirotor to send this command to
         """
-        self.vehicle_dict[vehicle_name].client.setPositionControllerGains(position_gains, self.vehicle_dict[vehicle_name].airsim_name)
+        self.vehicle_dict[vehicle_name].client.setPositionControllerGains(position_gains,
+                                                                          self.vehicle_dict[vehicle_name].airsim_name)
 
     # query vehicle state
     def getMultirotorState(self, vehicle_name=''):
@@ -1601,29 +1699,46 @@ class CustomAirsimClient:
 
 if __name__ == '__main__':
     s = socket(AF_INET, SOCK_STREAM)
-    s.bind(('127.0.0.1', 9699))
+    s.bind(('127.0.0.1', 9899))
     s.listen(200)  # 最大连接数
-    client = CustomAirsimClient(["172.18.0.2", "172.18.0.2"], s)
+    client = CustomAirsimClient(["127.0.0.1", "172.19.0.2"], s)
     dic = {'1': [1, 0],
            '2': [1, 1],
            '3': [0, 1],
            '4': [0, 0]}
     k = 0
+    time.sleep(5)
+    vehicle_0_pose = None
+    for each in client.listVehicles():
+        j = client.call_function_async('simGetObjectPose', each)
+    if client.call_back_is_done():
+        vehicle_0_pose = client.callback_result[client.listVehicles()[0]]
+    print(vehicle_0_pose)
+    client.empty_call_result()
+    print(vehicle_0_pose)
+    print(client.callback_result[client.listVehicles()[0]])
     time.sleep(2)
-    while True:
-        # client.reset()
-        a = client.listVehicles()
-        x, y = dic[str(k+1)]
-        lista = []
-        for name in a:
-            client.moveToPositionAsync(x, y, -3, 2, vehicle_name=name)
-            # lista.append(client.moveToPositionAsync(
-            #     x+k-10*int(client.vehicle_dict[name].client.ip[-1]), 0, -3, 2, vehicle_name=name))
-        for each in lista:
-            each.join()
-
-        k += 1
-        k %= 4
+    # while True:
+    #     for each in client.listVehicles():
+    #         s = client.simGetObjectPose(each)
+    #         """这时候指令全部发布完毕"""
+    #     if client.call_back_is_done():
+    #         """等待线程进行处理"""
+    #         vehicle_0_pose = client.callback_result[client.listVehicles()[0]]
+    #         # 回调的结果保存在callback_result中，随取随用
+    #
+    #     a = client.listVehicles()
+    #     x, y = dic[str(k + 1)]
+    #     lista = []
+    #     for name in a:
+    #         client.moveToPositionAsync(x, y, -3, 2, vehicle_name=name)
+    #         # lista.append(client.moveToPositionAsync(
+    #         #     x+k-10*int(client.vehicle_dict[name].client.ip[-1]), 0, -3, 2, vehicle_name=name))
+    #     for each in lista:
+    #         each.join()
+    #
+    #     k += 1
+    #     k %= 4
     # c1.run()
 
     # c1.run()
