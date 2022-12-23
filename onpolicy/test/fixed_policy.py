@@ -41,7 +41,7 @@ class FixedPolicy:
         self.socket_server = socket(AF_INET, SOCK_STREAM)
         self.socket_server.bind(('127.0.0.1', port))
         self.socket_server.listen(200)  # 最大连接数
-        self.client = CustomAirsimClient(ip, self.socket_server, plot_flag=True)
+        self.client = CustomAirsimClient(ip, self.socket_server, plot_flag=False)
         self.height = -10
         self.velocity = 10
         self.destroy_distance = 40
@@ -66,7 +66,8 @@ class FixedPolicy:
                 self.client.enableApiControl(True, vehicle_name=bp_name)
 
     def fly_patrol(self, bp_name):
-        patrol_client = airsim.MultirotorClient(self.client.vehicle_dict[bp_name].client.ip)
+        patrol_client = airsim.MultirotorClient(self.client.vehicle_dict[bp_name].client.ip,
+                                                self.client.vehicle_dict[bp_name].client.port)
         airsim_name = self.client.vehicle_dict[bp_name].airsim_name
         while True:
             if not self.get_caught[bp_name]:

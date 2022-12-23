@@ -2,7 +2,6 @@ from onpolicy.envs.airsim_envs.airsim_socket import CustomAirsimClient
 from socket import *
 import pandas as pd
 import time
-import airsim
 import threading
 import numpy as np
 from fixed_policy import *
@@ -46,9 +45,11 @@ class TrainedPolicy:
         self.obs_n = self.reset()
         self.done_n = None
         self.destroyed_enemy = []
+        self.agents = {}
         for agent in self.env.agents:
             agent.goal_position = self.mission_points[agent.name].data[0:2]
-
+            self.agents[agent.name] = agent
+        self.task_cancel = False
         time.sleep(1)
 
     def reset(self):
@@ -115,7 +116,10 @@ class TrainedPolicy:
                 self.env.agents[i].goal_position[1] = pose.y_val
                 self.env.agents[i].goal_name = bp_name
 
-    def assign_goal(self,  enemy_class: FixedPolicy):
+    def assign_goal(self, bp_name, goal):
+        self.agents[bp_name].goal_position = goal
+
+    def assign_enemy(self, enemy_class: FixedPolicy):
         # 分配没有任务的无人机随机指派点
         for i in range(len(self.attack_flag)):
             if not self.attack_flag[i] and self.done_n[i]:
@@ -211,19 +215,33 @@ class TrainedPolicy:
     #         for bp_name in enemy_class.remained_vehicle:
     #             self.enemy_position[bp_name] = enemy_class.client.simGetObjectPose(bp_name)
 
+    def cancel_task(self):
+        self.task_cancel = True
+        for agent in self.env.agents:
+            agent.goal_position = [agent.x, agent.y]
+
     def attack_run(self, enemy_class: FixedPolicy):
         self.find_first_enemy(np.array([0, 1]), enemy_class)
-
         while len(enemy_class.remained_vehicle):
+            if self.task_cancel:
+                self.task_cancel = False
+                print("attack mission canceled")
+                break
             for bp_name in enemy_class.remained_vehicle:
                 self.enemy_position[bp_name] = enemy_class.client.simGetObjectPose(bp_name).position
+            # 发现目标的无人机组织协同打击
             self.assign_attack()
-            self.assign_goal(enemy_class)
+            # 对召集到的无人机分配进攻目标
+            self.assign_enemy(enemy_class)
+            # 开启线程进行持续追踪打击，并且防守方人机反方向逃离
             self.attack_enemy(enemy_class)
+            # 判断是否存在摧毁距离内的无人机，若有，发射导弹
             self.detect_destroy_distance(enemy_class)
             time.sleep(1)
+        if not enemy_class.remained_vehicle:
+            print("attack mission done")
 
-    def plot_attack(self, friendly_force, enemy_name, ip='127.0.0.1', color = None):
+    def plot_attack(self, friendly_force, enemy_name, ip='127.0.0.1', color=None):
         if color is None:
             color = [1.0, 1.0, 0.0, 1.0]
         plot_client = airsim.MultirotorClient(ip)
@@ -233,6 +251,7 @@ class TrainedPolicy:
                                               color_rgba=color,
                                               is_persistent=False)
             # time.sleep(0.1)
+
 
 
 if __name__ == "__main__":
@@ -274,11 +293,11 @@ if __name__ == "__main__":
     actor1 = R_Actor(config['cfg'], config['envs'].observation_space[0], config['envs'].action_space[0], config['device'])
     actor1.load_state_dict(policy_actor_state_dict)
 
-    patrol_drones = FixedPolicy("patrol_50.txt", ["127.0.0.1:41451"], 9699)
-    # attack_drones = TrainedPolicy("mission_point.txt", actor1, env)
+    patrol_drones = FixedPolicy("patrol_50.txt", ["127.0.0.1:41451", "10.134.142.129:41451"], 9699)
+    attack_drones = TrainedPolicy("mission_point.txt", actor1, env)
     patrol_drones.fly_run()
-    # attack_drones.fly_run()
-    # while True:
-    #     attack_drones.attack_run(patrol_drones)
+    attack_drones.fly_run()
+    while True:
+        attack_drones.attack_run(patrol_drones)
 
     # a.fly_run()

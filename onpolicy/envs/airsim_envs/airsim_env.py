@@ -58,7 +58,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         # ip_list =cfg.get('options', 'ip')
 
         self.client = CustomAirsimClient(cfg.get('options', 'ip').split(','), self.socket_server,
-                                         plot_flag=True, plot_color=[0, 1, 0, 1])
+                                         plot_flag=False, plot_color=[0, 1, 0, 1])
         time.sleep(3)
         np.set_printoptions(formatter={'float': '{: 4.2f}'.format}, suppress=True)
         torch.set_printoptions(profile="short", sci_mode=False, linewidth=1000)
@@ -196,7 +196,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         for i, agent in enumerate(self.agents):
             if not agent.is_crash:
                 fi.append(self._set_action(i, agent))
-
+        b = time.time()
         self.cur_state = self.get_all_state()
         for i, agent in enumerate(self.agents):
             agent.x = self.cur_state[i].position.x_val
@@ -219,7 +219,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
             if done_n[i]:
                 print(info)
             info_n.append(info)
-
+        print(time.time() - b)
         self.client.empty_call_result()
         self.cumulated_episode_reward += np.array(reward_n)
 
@@ -359,9 +359,11 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
             distance_fblr_norm = np.array(distance_sensors) / 200
         else:
             for each in range(9):
-                self.client.call_function_async(agent.name, "getDistanceSensorData", "Distance" + str(each), agent.name)
+                self.client.call_function_async(agent.name,
+                                                "getDistanceSensorData", "Distance" + str(each), agent.airsim_name)
             for each in range(18, 36):
-                self.client.call_function_async(agent.name, "getDistanceSensorData", "Distance" + str(each), agent.name)
+                self.client.call_function_async(agent.name,
+                                                "getDistanceSensorData", "Distance" + str(each), agent.airsim_name)
 
         relative_yaw = agent.get_relative_yaw()
         relative_yaw_norm = (relative_yaw / math.pi / 2 + 0.5)

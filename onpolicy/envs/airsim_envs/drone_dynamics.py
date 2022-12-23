@@ -11,6 +11,7 @@ class DroneDynamicsAirsim:
         self.state_current_attitude = None
         self.id = i
         self.name = name
+
         # # AirSim Client
         # self.client = airsim.client.MultirotorClient()
         # self.client.confirmConnection()

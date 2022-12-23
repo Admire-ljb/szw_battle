@@ -8,6 +8,9 @@ import numpy as np
 
 # import socket
 
+def remote_call(function_name, *args):
+    return eval(function_name)(*args)
+
 
 def get_free_port():
     sock = socket()
@@ -39,6 +42,7 @@ class VehicleDict:
         self.blueprint_client = None
         self.send_flag = 0
         self.send_client = None
+        self.ip_port = None
 
 
 def send_msg(vehicle_class, plot_flag=False, color=None):
@@ -99,12 +103,17 @@ class CustomAirsimClient:
         self.t3 = threading.Thread(target=self.call_back_tcp_server, args=(local_ip, local_port), name='rec')
         self.t3.start()
         self.call_back_send_list = {}
+        self.call_back_client = {}
         for ip_port in ip_list:
             self.call_back_send_list[ip_port] = socket(AF_INET, SOCK_STREAM)
             self.call_back_send_list[ip_port].connect((local_ip, local_port))
+            ip, port = ip_port.split(":")
+            self.call_back_client[ip_port] = airsim.client.MultirotorClient(ip, int(port))
         self.callback_result = {}
         self.call_back_done = 0
         self.call_back_send = 0
+
+
         self.vehicle_dict = {}
         self.t = threading.Thread(target=self.recs, args=())
         self.t.start()
@@ -144,9 +153,11 @@ class CustomAirsimClient:
                     args = []
                     for i in range(2, len(cmd_list)):
                         args.append(cmd_list[i])
-                    data = eval("self."+func)(*args)
+                    data = eval("self.call_back_client[self.vehicle_dict["+"\""+object_name+"\"""].ip_port]."+func)(*args)
+                    # data = eval("self." + func)(*args, call_back_flag=True)
                     if func == 'getDistanceSensorData':
                         data = data.distance / 200
+
                     self.callback_result[object_name].append(data)
                     self.call_back_done += 1
             except:
@@ -184,6 +195,7 @@ class CustomAirsimClient:
                                     self.vehicle_dict[each].send_client = self.call_back_send_list[self.vehicle_dict[each].client.ip + ':' + str(self.vehicle_dict[each].client.port)]
                                     self.vehicle_dict[each].blueprint_client = airsim.MultirotorClient(
                                         self.blueprint_ip)
+                                    self.vehicle_dict[each].ip_port = self.vehicle_dict[each].client.ip + ":" + str(self.vehicle_dict[each].client.port)
                                     self.vehicle_dict[each].pose_client.enableApiControl(
                                         True, self.vehicle_dict[each].airsim_name)
                                     self.assigned_blueprint.append(each)
@@ -657,6 +669,7 @@ class CustomAirsimClient:
                                                                thickness, self.vehicle_dict[vehicle_name].airsim_name)
 
     def call_function_async(self, object_name, function_name, *args):
+        """Using airsim_name instead of bp_name"""
         msg = object_name + '|' + function_name
         for arg in args:
             msg = msg + '|' + str(arg)
