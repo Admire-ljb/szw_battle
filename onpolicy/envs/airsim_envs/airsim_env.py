@@ -157,10 +157,10 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         self.action_space = []
         for each in range(self.num_of_drones):
             self.observation_space.append(spaces.Box(
-                low=0, high=1, shape=(29, ), dtype=np.float32))
+                low=0, high=1, shape=(5, ), dtype=np.float32))
             self.action_space.append(self.agents[0].action_space)
         self.share_observation_space = [spaces.Box(
-            low=0, high=1, shape=(29 * self.num_of_drones, ),
+            low=0, high=1, shape=(5 * self.num_of_drones, ),
             dtype=np.float32) for _ in range(self.num_of_drones)]
         self.pre_obs_n = []
         self.pre_reward = []
@@ -213,21 +213,23 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         if not self.train_flag and self.client.call_back_is_done():
             for i, agent in enumerate(self.agents):
                 obs_n[i] = np.append(np.array(self.client.callback_result[agent.name]), obs_n[i]).clip(0, 1)
-        for i, agent in enumerate(self.agents):
-            reward_n.append(self._get_reward(obs_n[i], agent, action_n[i]))
-            info = self._get_info(agent, reward_n[i])
-            if done_n[i]:
-                print(info)
-            info_n.append(info)
-        print(time.time() - b)
-        self.client.empty_call_result()
-        self.cumulated_episode_reward += np.array(reward_n)
+        if self.train_flag:
+            for i, agent in enumerate(self.agents):
+                reward_n.append(self._get_reward(obs_n[i], agent, action_n[i]))
+                info = self._get_info(agent, reward_n[i])
+                if done_n[i]:
+                    print(info)
+                info_n.append(info)
+            self.cumulated_episode_reward += np.array(reward_n)
 
-        """all agents get total reward in cooperative case, if shared reward,
-        all agents have the same reward, and reward is sum"""
-        reward = np.sum(reward_n)
-        if self.shared_reward:
-            reward_n = [[reward]] * self.num_of_drones
+            """all agents get total reward in cooperative case, if shared reward,
+            all agents have the same reward, and reward is sum"""
+            reward = np.sum(reward_n)
+            if self.shared_reward:
+                reward_n = [[reward]] * self.num_of_drones
+
+        # print(time.time() - b)
+        self.client.empty_call_result()
 
         # TODO debug 部分摧毁直接结束场景
         # if sum(done_n) > 10:
@@ -349,21 +351,21 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         distance_fblr_norm = np.array([])
         if train_flag:
             distance_sensors = []
-            for each in range(9):
+            for each in range(3):
                 distance_sensors.append(
                     self.client.getDistanceSensorData("Distance" + str(each), agent.name).distance)
-            for each in range(18, 36):
-                distance_sensors.append(
-                    self.client.getDistanceSensorData("Distance" + str(each), agent.name).distance)
+            # for each in range(18, 36):
+            #     distance_sensors.append(
+            #         self.client.getDistanceSensorData("Distance" + str(each), agent.name).distance)
 
             distance_fblr_norm = np.array(distance_sensors) / 200
         else:
-            for each in range(9):
+            for each in range(3):
                 self.client.call_function_async(agent.name,
                                                 "getDistanceSensorData", "Distance" + str(each), agent.airsim_name)
-            for each in range(18, 36):
-                self.client.call_function_async(agent.name,
-                                                "getDistanceSensorData", "Distance" + str(each), agent.airsim_name)
+            # for each in range(18, 36):
+            #     self.client.call_function_async(agent.name,
+            #                                     "getDistanceSensorData", "Distance" + str(each), agent.airsim_name)
 
         relative_yaw = agent.get_relative_yaw()
         relative_yaw_norm = (relative_yaw / math.pi / 2 + 0.5)
@@ -393,12 +395,12 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
             return 0
         reward = 0
 
-        if min(obs[0:9]) < self.avoid_distance - 0.15:
+        if obs[0] < self.avoid_distance - 0.15:
             # if agent.last_min_distance != 0:
             #     distance_change = agent.last_min_distance-min_distance
             #     reward -= distance_change * 4000
             # else:
-            reward -= np.power((self.avoid_distance-min(obs[0:9])) * 5, 2) * 10
+            reward -= np.power((self.avoid_distance-obs[0]) * 5, 2) * 10
 
         # if agent.avoid_state == 1 and obs[0] > self.avoid_distance:
         #     reward += 2
