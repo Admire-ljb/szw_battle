@@ -26,17 +26,34 @@ class SortedBPname:
     def first_sort_friend(self, position_dict, sorted_bp_dict):
         # x = position_dict[self.bp_name][0]
         # y = position_dict[self.bp_name][1]
-        pre_x = self.x - 1000
-        pre_y = self.y - 1000
-        next_x = self.x + 1000
-        next_y = self.y + 1000
+        pre_x = self.x - 10000
+        pre_y = self.y - 10000
+        next_x = self.x + 10000
+        next_y = self.y + 10000
         for bp_name in position_dict:
-            if self.x < position_dict[bp_name][0] < next_x:
+            if self.index == sorted_bp_dict[bp_name].index:
+                continue
+            if self.x == position_dict[bp_name][0]:
+                if not self.pre_x_friend or self.pre_x_friend.index < sorted_bp_dict[bp_name].index:
+                    if sorted_bp_dict[bp_name].index < self.index:
+                        self.pre_x_friend = sorted_bp_dict[bp_name]
+                        pre_x = self.x
+                if not self.next_x_friend or self.next_x_friend.index > sorted_bp_dict[bp_name].index:
+                    if sorted_bp_dict[bp_name].index > self.index:
+                        self.next_x_friend = sorted_bp_dict[bp_name]
+                        next_x = self.x
+            elif self.x < position_dict[bp_name][0] < next_x:
                 next_x = position_dict[bp_name][0]
                 self.next_x_friend = sorted_bp_dict[bp_name]
             elif pre_x < position_dict[bp_name][0] < self.x:
                 pre_x = position_dict[bp_name][0]
                 self.pre_x_friend = sorted_bp_dict[bp_name]
+            elif pre_x == position_dict[bp_name][0]:
+                if self.pre_x_friend.index < sorted_bp_dict[bp_name].index:
+                    self.pre_x_friend = sorted_bp_dict[bp_name]
+            elif next_x == position_dict[bp_name][0]:
+                if self.next_x_friend.index > sorted_bp_dict[bp_name].index:
+                    self.next_x_friend = sorted_bp_dict[bp_name]
             if self.y < position_dict[bp_name][1] < next_y:
                 next_y = position_dict[bp_name][1]
                 self.next_y_friend = sorted_bp_dict[bp_name]
@@ -146,14 +163,64 @@ class SortedBPname:
     def get_nearest_friend(self, ban_name=False):
 
         dis = dis2 = dis3 = dis4 = 100000
+        x_pre_index = 0
+        y_pre_index = 0
+        x_next_index = 0
+        y_next_index = 0
         if self.pre_x_friend:
             dis = np.sqrt(np.power(self.pre_x_friend.x - self.x, 2) + np.power(self.pre_x_friend.y - self.y, 2))
+            if self.pre_x_friend.pre_x_friend:
+                dis_temp = np.sqrt(np.power(self.pre_x_friend.pre_x_friend.x - self.x, 2) + np.power(self.pre_x_friend.pre_x_friend.y - self.y, 2))
+                if dis_temp < dis:
+                    dis = dis_temp
+                    x_pre_index = 1
+            if self.pre_x_friend.pre_x_friend.pre_x_friend:
+                dis_temp = np.sqrt(np.power(self.pre_x_friend.pre_x_friend.pre_x_friend.x - self.x, 2) + np.power(
+                    self.pre_x_friend.pre_x_friend.pre_x_friend.y - self.y, 2))
+                if dis_temp < dis:
+                    dis = dis_temp
+                    x_pre_index = 2
         if self.next_x_friend:
             dis2 = np.sqrt(np.power(self.next_x_friend.x - self.x, 2) + np.power(self.next_x_friend.y - self.y, 2))
+            if self.next_x_friend.next_x_friend:
+                dis_temp = np.sqrt(np.power(self.next_x_friend.next_x_friend.x - self.x, 2) + np.power(
+                    self.next_x_friend.next_x_friend.y - self.y, 2))
+                if dis_temp < dis2:
+                    dis2 = dis_temp
+                    x_next_index = 1
+            if self.next_x_friend.next_x_friend.next_x_friend:
+                dis_temp = np.sqrt(np.power(self.next_x_friend.next_x_friend.next_x_friend.x - self.x, 2) + np.power(
+                    self.next_x_friend.next_x_friend.next_x_friend.y - self.y, 2))
+                if dis_temp < dis2:
+                    dis2 = dis_temp
+                    x_next_index = 2
         if self.pre_y_friend:
             dis3 = np.sqrt(np.power(self.pre_y_friend.x - self.x, 2) + np.power(self.pre_y_friend.y - self.y, 2))
+            if self.pre_y_friend.pre_y_friend:
+                dis_temp = np.sqrt(np.power(self.pre_y_friend.pre_y_friend.x - self.x, 2) + np.power(self.pre_y_friend.pre_y_friend.y - self.y, 2))
+                if dis_temp < dis3:
+                    dis3 = dis_temp
+                    y_pre_index = 1
+            if self.pre_y_friend.pre_y_friend.pre_y_friend:
+                dis_temp = np.sqrt(np.power(self.pre_y_friend.pre_y_friend.pre_y_friend.x - self.x, 2) + np.power(
+                    self.pre_y_friend.pre_y_friend.pre_y_friend.y - self.y, 2))
+                if dis_temp < dis3:
+                    dis3 = dis_temp
+                    y_pre_index = 2
         if self.next_y_friend:
             dis4 = np.sqrt(np.power(self.next_y_friend.x - self.x, 2) + np.power(self.next_y_friend.y - self.y, 2))
+            if self.next_y_friend.next_y_friend:
+                dis_temp = np.sqrt(np.power(self.next_y_friend.next_y_friend.x - self.x, 2) + np.power(
+                    self.next_y_friend.next_y_friend.y - self.y, 2))
+                if dis_temp < dis4:
+                    dis4 = dis_temp
+                    y_next_index = 1
+            if self.next_y_friend.next_y_friend.next_y_friend:
+                dis_temp = np.sqrt(np.power(self.next_y_friend.next_y_friend.next_y_friend.x - self.x, 2) + np.power(
+                    self.next_y_friend.next_y_friend.next_y_friend.y - self.y, 2))
+                if dis_temp < dis4:
+                    dis4 = dis_temp
+                    y_next_index = 2
         index = np.argmin([dis, dis2, dis3, dis4])
 
         if index == 0 and self.pre_x_friend.bp_name != ban_name:
@@ -167,8 +234,16 @@ class SortedBPname:
         else:
             return dis, np.random.choice([self.pre_x_friend, self.next_x_friend, self.pre_y_friend, self.next_y_friend])
 
-    def get_nearest_enemy(self):
+    def get_nearest_enemy(self, ban_list):
         dis = dis2 = dis3 = dis4 = 1000000
+        if self.pre_x_enemy in ban_list:
+            self.pre_x_enemy = self.pre_x_enemy.get_nearest_friend()
+        if self.pre_y_enemy in ban_list:
+            self.pre_y_enemy = self.pre_y_enemy.get_nearest_friend()
+        if self.next_x_enemy in ban_list:
+            self.next_x_enemy = self.next_x_enemy.get_nearest_friend()
+        if self.next_y_enemy in ban_list:
+            self.next_y_enemy = self.next_y_enemy.get_nearest_friend()
         if self.pre_x_enemy:
             dis = np.sqrt(np.power(self.pre_x_enemy.x - self.x, 2) + np.power(self.pre_x_enemy.y - self.y, 2))
         if self.next_x_enemy:
@@ -186,6 +261,17 @@ class SortedBPname:
             return dis3, self.pre_y_enemy
         else:
             return dis4, self.next_y_enemy
+
+    def destroy_self(self):
+        if self.pre_x_friend:
+            self.pre_x_friend.next_x_friend = self.next_x_friend
+        if self.pre_y_friend:
+            self.pre_y_friend.next_y_friend = self.next_y_friend
+        if self.next_x_friend:
+            self.next_x_friend.pre_x_friend = self.pre_x_friend
+        if self.next_y_friend:
+            self.next_y_friend.pre_y_friend = self.pre_y_friend
+
 
 class RecurrentList(object):
     """循环列表"""
@@ -209,7 +295,6 @@ class LinkedNode(object):
         self.x_next = None
         self.y_pre = None
         self.y_next = None
-
 
 
 class FixedPolicy:
@@ -238,12 +323,15 @@ class FixedPolicy:
         self.remained_vehicle = self.client.listVehicles()
         self.position_dict = {}
         self.reset()
+        cnt = 0
         for bp_name in self.position_dict:
             self.sorted_bp_dict[bp_name] = SortedBPname(bp_name, self.position_dict[bp_name][0],
                                                         self.position_dict[bp_name][1])
+            self.sorted_bp_dict[bp_name].index = cnt
+            cnt += 1
         for bp_name in self.sorted_bp_dict:
             self.sorted_bp_dict[bp_name].first_sort_friend(self.position_dict, self.sorted_bp_dict)
-0
+
     def reset(self):
         for i in range(5):
             for bp_name in self.mission_points:
@@ -279,15 +367,15 @@ class FixedPolicy:
                                                       yaw_mode=airsim.YawMode(is_rate=False))
                 # time.sleep(1)
             for each in range(30):
-                time.sleep(0.5)
+                time.sleep(0.3)
                 # print('get_pose')
                 pose = patrol_client.simGetObjectPose(airsim_name).position
                 self.position_dict[bp_name] = np.array([pose.x_val, pose.y_val])
 
             # pose = patrol_client.simGetObjectPose(bp_name).position
-            self.sorted_bp_dict[bp_name].x = pose.x_val
-            self.sorted_bp_dict[bp_name].y = pose.y_val
-            self.sorted_bp_dict[bp_name].resort_friend()
+                self.sorted_bp_dict[bp_name].x = pose.x_val
+                self.sorted_bp_dict[bp_name].y = pose.y_val
+            # self.sorted_bp_dict[bp_name].resort_friend()
             # self.position_dict[bp_name] = np.array([pose.x_val, pose.y_val])
             # _.join()
 
@@ -327,12 +415,13 @@ class FixedPolicy:
         pose.position.x_val = 9999
         pose.position.y_val = 9999
         pose.position.z_val = -9999
+        self.sorted_bp_dict[bp_name].destroy_self()
         for i in range(10):
             tmp_client.simSetVehiclePose(pose, True, vehicle_name=airsim_name)
         self.remained_vehicle.remove(bp_name)
 
 
 if __name__ == "__main__":
-    a = FixedPolicy("patrol_50.txt", ['127.0.0.1:41451', '10.134.142.129'], 9699)
+    a = FixedPolicy("patrol_100.txt", ['127.0.0.1:41451', '10.134.142.129:41451'], 9699)
     time.sleep(1)
     a.fly_run()

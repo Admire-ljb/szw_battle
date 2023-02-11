@@ -1,0 +1,258 @@
+{
+  "SettingsVersion": 1.2,
+  "SimMode": "Car",
+  "Vehicles": {
+    "Car1": {
+      "VehicleType": "PhysXCar",
+      "X": -815,
+      "Y": -2803,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car2": {
+      "VehicleType": "PhysXCar",
+      "X": -815,
+      "Y": -2809,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car3": {
+      "VehicleType": "PhysXCar",
+      "X": -382,
+      "Y": -2743,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car4": {
+      "VehicleType": "PhysXCar",
+      "X": -382,
+      "Y": -2749,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car5": {
+      "VehicleType": "PhysXCar",
+      "X": -382,
+      "Y": -2737,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car6": {
+      "VehicleType": "PhysXCar",
+      "X": -31,
+      "Y": -2696,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car7": {
+      "VehicleType": "PhysXCar",
+      "X": -31,
+      "Y": -2702,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car8": {
+      "VehicleType": "PhysXCar",
+      "X": 478,
+      "Y": -2561,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car9": {
+      "VehicleType": "PhysXCar",
+      "X": 478,
+      "Y": -2567,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car10": {
+      "VehicleType": "PhysXCar",
+      "X": -1433,
+      "Y": -2262,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car11": {
+      "VehicleType": "PhysXCar",
+      "X": -875,
+      "Y": -2262,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car12": {
+      "VehicleType": "PhysXCar",
+      "X": -875,
+      "Y": -2268,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car13": {
+      "VehicleType": "PhysXCar",
+      "X": 284,
+      "Y": -1159,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car14": {
+      "VehicleType": "PhysXCar",
+      "X": 284,
+      "Y": -1165,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car15": {
+      "VehicleType": "PhysXCar",
+      "X": 298,
+      "Y": -169,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car16": {
+      "VehicleType": "PhysXCar",
+      "X": 298,
+      "Y": -175,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car17": {
+      "VehicleType": "PhysXCar",
+      "X": -119,
+      "Y": 817,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car18": {
+      "VehicleType": "PhysXCar",
+      "X": -1152,
+      "Y": -19,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car19": {
+      "VehicleType": "PhysXCar",
+      "X": -1152,
+      "Y": -25,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car20": {
+      "VehicleType": "PhysXCar",
+      "X": 87,
+      "Y": -2034,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car21": {
+      "VehicleType": "PhysXCar",
+      "X": 87,
+      "Y": -2040,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car22": {
+      "VehicleType": "PhysXCar",
+      "X": 87,
+      "Y": -2028,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car23": {
+      "VehicleType": "PhysXCar",
+      "X": -1294,
+      "Y": -1146,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car24": {
+      "VehicleType": "PhysXCar",
+      "X": -1294,
+      "Y": -1152,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car25": {
+      "VehicleType": "PhysXCar",
+      "X": -1294,
+      "Y": -1140,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car26": {
+      "VehicleType": "PhysXCar",
+      "X": -880,
+      "Y": -1700,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car27": {
+      "VehicleType": "PhysXCar",
+      "X": -880,
+      "Y": -1706,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car28": {
+      "VehicleType": "PhysXCar",
+      "X": -880,
+      "Y": -1694,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car29": {
+      "VehicleType": "PhysXCar",
+      "X": -254,
+      "Y": 138,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car30": {
+      "VehicleType": "PhysXCar",
+      "X": -254,
+      "Y": 132,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car31": {
+      "VehicleType": "PhysXCar",
+      "X": -292,
+      "Y": -153,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car32": {
+      "VehicleType": "PhysXCar",
+      "X": -292,
+      "Y": -159,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car33": {
+      "VehicleType": "PhysXCar",
+      "X": -292,
+      "Y": -147,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car34": {
+      "VehicleType": "PhysXCar",
+      "X": -221,
+      "Y": -2086,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car35": {
+      "VehicleType": "PhysXCar",
+      "X": -221,
+      "Y": -2092,
+      "Z": -4,
+      "Yaw": 0
+    },
+    "Car36": {
+      "VehicleType": "PhysXCar",
+      "X": -221,
+      "Y": -2080,
+      "Z": -4,
+      "Yaw": 0
+    }
+  }
+}

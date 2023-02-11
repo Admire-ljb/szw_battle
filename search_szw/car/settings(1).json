@@ -1,0 +1,21 @@
+{
+  "SettingsVersion": 1.2,
+  "SimMode": "Car",
+
+  "Vehicles": {
+    "Car1": {
+      "VehicleType": "PhysXCar",
+      "X": -875,
+      "Y": -2262,
+      "Z": -3,
+      "Yaw": 0
+    },
+    "Car2": {
+      "VehicleType": "PhysXCar",
+      "X": -1218,
+      "Y": -562,
+      "Z": -3,
+      "Yaw": -90
+    }
+  }
+}

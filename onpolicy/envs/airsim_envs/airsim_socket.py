@@ -54,7 +54,7 @@ def send_msg(vehicle_class, plot_flag=False, color=None):
             if plot_flag:
                 plot_target(pos, vehicle_class.blueprint_client, color)
             msg = '_' + str(d_pos.x_val * 100) + '_' + str(d_pos.y_val * 100) + '_' + str(-d_pos.z_val * 100) + '_' + \
-                  str(euler[0]) + '_' + str(euler[1]) + '_' + str(euler[2])
+                  str(euler[0]) + '_' + str(euler[1]) + '_' + str(euler[2]) + '_' + '(R=0,G=1,B=0)'
             # print(msg)
             vehicle_class.socket_client.sendall(msg.encode('utf-8'))
 
@@ -1712,7 +1712,7 @@ class CustomAirsimClient:
 
 if __name__ == '__main__':
     s = socket(AF_INET, SOCK_STREAM)
-    s.bind(('127.0.0.1', 9899))
+    s.bind(('127.0.0.1', 9699))
     s.listen(200)  # 最大连接数
     client = CustomAirsimClient(["127.0.0.1", "172.19.0.2"], s)
     dic = {'1': [1, 0],

@@ -64,13 +64,15 @@ class TrainedPolicy:
         self.sorted_bp_dict = {}
         self.bp_names_list = []
         self.obs_n = self.reset()
+        cnt = 0
         for agent in self.env.agents:
             self.position_dict[agent.name] = np.array([agent.x, agent.y])
             self.sorted_bp_dict[agent.name] = SortedBPname(agent.name, agent.x, agent.y)
+            self.sorted_bp_dict[agent.name].index = cnt
+            cnt += 1
         for bp_name in self.sorted_bp_dict:
             self.sorted_bp_dict[bp_name].first_sort_friend(self.position_dict, self.sorted_bp_dict)
             self.bp_names_list.append(bp_name)
-            self.sorted_bp_dict[bp_name].index = len(self.bp_names_list) - 1
             self.attack_flag[bp_name] = 0
         self.task_cancel = False
         time.sleep(1)
@@ -135,7 +137,7 @@ class TrainedPolicy:
             # for i in agent_id_list:
             # enemy_name = enemy_class.remained_vehicle[0]
             for bp_name in self.sorted_bp_dict:
-                dis, bp_sorted = self.sorted_bp_dict[bp_name].get_nearest_enemy()
+                dis, bp_sorted = self.sorted_bp_dict[bp_name].get_nearest_enemy(self.destroyed_enemy)
                 if dis < self.destroy_distance + 80:
                     self.attack_flag[bp_name] = bp_sorted.bp_name
                     self.agents[bp_name].goal_name = bp_sorted.bp_name
@@ -164,7 +166,7 @@ class TrainedPolicy:
                 # self.env.agents[i].goal_position[1] = pose.y_val
                 self.env.agents[i].goal_name = enemy_bp_name
 
-    def assign_attack(self, drone_num=3):
+    def assign_attack(self, drone_num=2):
         for bp_name in self.attack_flag:
             if self.attack_flag[bp_name]:
                 cur_drone = drone_num - len(self.attacked_enemy[self.attack_flag[bp_name]])
@@ -179,7 +181,12 @@ class TrainedPolicy:
             self.attack_flag[friend.bp_name] = self.attack_flag[bp_name]
             self.agents[friend.bp_name].goal_name = self.agents[bp_name].goal_name
             self.attacked_enemy[self.agents[bp_name].goal_name].append(friend.bp_name)
-
+        else:
+            friend_bp_name = self.bp_names_list[np.random.randint(0, len(self.bp_names_list))]
+            if not self.attack_flag[friend_bp_name]:
+                self.attack_flag[friend_bp_name] = self.attack_flag[bp_name]
+                self.agents[friend_bp_name].goal_name = self.agents[bp_name].goal_name
+                self.attacked_enemy[self.agents[bp_name].goal_name].append(friend_bp_name)
         # else:
         #     if self.sorted_bp_dict[bp_name].pre_x_friend and not self.attack_flag[self.sorted_bp_dict[bp_name].pre_x_friend.bp_name] :
         #         self.attack_flag[self.sorted_bp_dict[bp_name].pre_x_friend.bp_name] = self.attack_flag[bp_name]
@@ -214,7 +221,7 @@ class TrainedPolicy:
 
     def get_nearest_enemy(self, bp_name):
         # bp_name = self.bp_names_list[i]
-        dis, enemy = self.sorted_bp_dict[bp_name].get_nearest_enemy()
+        dis, enemy = self.sorted_bp_dict[bp_name].get_nearest_enemy(self.destroyed_enemy)
         return enemy.bp_name, dis
 
     def detect_destroy_distance(self,  enemy_class: FixedPolicy):
@@ -222,10 +229,11 @@ class TrainedPolicy:
         for bp_name in self.attack_flag:
             if not self.attack_flag[bp_name] and not self.agents[bp_name].wait_step:
                 enemy_name, dis = self.get_nearest_enemy(bp_name)
-                if enemy_name not in self.destroyed_enemy and dis < self.destroy_distance + 40:
+                if enemy_name not in self.destroyed_enemy and dis < self.destroy_distance + 90:
                     self.attack_flag[bp_name] = enemy_name
                     self.agents[bp_name].goal_name = enemy_name
                     self.attacked_enemy[enemy_name].append(bp_name)
+                    self.destroyed_enemy.append(enemy_name)
             if self.attack_flag[bp_name] and not self.agents[bp_name].wait_step:
 
                 try:
@@ -261,10 +269,10 @@ class TrainedPolicy:
 
     def destroy_enemy(self, friendly_force, enemy_class: FixedPolicy, enemy_bp_name):
         # enemy_class.client.simSetVehiclePose(self.enemy_position[enemy], True, enemy)
-        self.destroyed_enemy.append(enemy_bp_name)
+
         enemy_class.client.enableApiControl(False, enemy_bp_name)
         for self_bp_name in friendly_force:
-            self.agents[self_bp_name].wait_step = 10
+            self.agents[self_bp_name].wait_step = 5
         while self.agents[friendly_force[0]].wait_step > 0:
             time.sleep(0.5)
             self.plot_attack(friendly_force, enemy_class.position_dict[enemy_bp_name])
@@ -294,9 +302,11 @@ class TrainedPolicy:
                 break
             for bp_name in enemy_class.remained_vehicle:
                 self.enemy_position[bp_name] = enemy_class.position_dict[bp_name]
+                enemy_class.sorted_bp_dict[bp_name].resort_friend()
             for bp_name in self.sorted_bp_dict:
                 self.sorted_bp_dict[bp_name].resort_friend()
                 self.sorted_bp_dict[bp_name].resort_enemy()
+
             # 发现目标的无人机组织协同打击
             self.assign_attack()
             # 对召集到的无人机分配进攻目标
@@ -305,7 +315,7 @@ class TrainedPolicy:
             self.attack_enemy(enemy_class)
             # 判断是否存在摧毁距离内的无人机，若有，发射导弹
             self.detect_destroy_distance(enemy_class)
-            time.sleep(1)
+            time.sleep(0.5)
         if not enemy_class.remained_vehicle:
             print("attack mission done")
 
@@ -313,13 +323,20 @@ class TrainedPolicy:
         if color is None:
             color = [1.0, 1.0, 0.0, 1.0]
         plot_client = airsim.MultirotorClient(ip)
-
         for name in friendly_force:
             plot_client.simPlotLineList([airsim.Vector3r(self.position_dict[name][0], self.position_dict[name][1], -40)
                                         , airsim.Vector3r(enemy_pose[0], enemy_pose[1], -40)], thickness=50.0, duration=0.2,
                                         color_rgba=color,
                                         is_persistent=False)
             # time.sleep(0.1)
+
+    def GoTo(self, bp_names, position):
+        for bp_name in bp_names:
+            self.agents[bp_name].goal_position =  position
+
+    def Follow(self, bp_names, target):
+        for bp_name in bp_names:
+            self.agents[bp_name].goal_position = target.goal_position
 
 
 
@@ -362,7 +379,7 @@ if __name__ == "__main__":
     actor1 = R_Actor(config['cfg'], config['envs'].observation_space[0], config['envs'].action_space[0], config['device'])
     actor1.load_state_dict(policy_actor_state_dict)
 
-    patrol_drones = FixedPolicy("patrol_50.txt", ["127.0.0.1:41451", '10.134.142.129:41451'], 9699)
+    patrol_drones = FixedPolicy("patrol_100.txt", ["127.0.0.1:41451", '10.134.142.129:41451'], 9699)
     attack_drones = TrainedPolicy(actor1, env)
     patrol_drones.fly_run()
     attack_drones.fly_run()

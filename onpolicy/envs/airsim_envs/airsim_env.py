@@ -235,7 +235,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         # if sum(done_n) > 10:
         #     for i in range(len(done_n)):
         #         done_n[i] = 1
-        # print('api_using_time:', time.time() - b)
+        print('api_using_time:', time.time() - b)
         self.pre_obs_n = obs_n
         self.pre_reward = reward_n
         return obs_n, reward_n, done_n, info_n
@@ -454,7 +454,19 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
     def reset(self):
 
         # reset state
-        self.client.reset()
+
+
+
+
+
+
+
+
+
+
+
+
+
         # self.goal_position = np.random.randn(3)*100
         self.goal_choose_name = np.random.randint(self.goal_num)
         pos = self.client.simGetObjectPose(self.goal_name[self.goal_choose_name])
@@ -464,7 +476,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         fi = []
         # self.coverage_area = np.zeros(self.discrete_grid_y * self.discrete_grid_x)
         start_position = [-1356.0, -48.0]
-        s = int(np.sqrt(self.num_of_drones))
+        s = int(np.sqrt(self.num_of_drones))+1
         position_list = []
         for i in range(0, 4 * s, 4):
             for j in range(0, self.num_of_drones//s * 4, 4):
