@@ -65,7 +65,7 @@ def all_arrive():
 
 
 def control_choice(pos,witchcar,index,angel):
-    angel_to = (math.atan2(des[witchcar][index][1] - pos[1],des[witchcar][index][0] - pos[0]))*180/3.14
+    angel_to = (math.atan2(des[witchcar][index][1] - pos[1], des[witchcar][index][0] - pos[0]))*180/3.14
     delta = angel_to - angel
     if delta > 180:
         delta = delta - 360
@@ -302,7 +302,7 @@ def start_search(destination_people_pose):
             x = simget_pos.x_val
             y = simget_pos.y_val
             z = simget_pos.z_val
-            controller, i = control_choice([x, y], cnum-1,i, angel)
+            controller, i = control_choice([x, y], cnum-1, i, angel)
             index[cnum - 1] = i
             car_controls.throttle, car_controls.steering, car_controls.brake = control(controller)
             vx = car_state.kinematics_estimated.linear_velocity.x_val

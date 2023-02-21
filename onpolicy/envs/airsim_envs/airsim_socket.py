@@ -45,7 +45,7 @@ class VehicleDict:
         self.ip_port = None
 
 
-def send_msg(vehicle_class, plot_flag=False, color=None):
+def send_msg(vehicle_class, plot_flag=False, color="001"):
     while True:
         if vehicle_class.send_flag == 0:
             pos = vehicle_class.pose_client.simGetObjectPose(vehicle_class.airsim_name)
@@ -54,17 +54,17 @@ def send_msg(vehicle_class, plot_flag=False, color=None):
             if plot_flag:
                 plot_target(pos, vehicle_class.blueprint_client, color)
             msg = '_' + str(d_pos.x_val * 100) + '_' + str(d_pos.y_val * 100) + '_' + str(-d_pos.z_val * 100) + '_' + \
-                  str(euler[0]) + '_' + str(euler[1]) + '_' + str(euler[2]) + '_' + '(R=0,G=1,B=0)'
+                  str(euler[0]) + '_' + str(euler[1]) + '_' + str(euler[2]) + '_' + '(R={},G={},B={})'.format(color[0], color[1], color[2])
             # print(msg)
             vehicle_class.socket_client.sendall(msg.encode('utf-8'))
 
         else:
             vehicle_class.send_flag = 0
-        time.sleep(0.1)
+        time.sleep(0.2)
 
 
 class CustomAirsimClient:
-    def __init__(self, ip_list, socket_server, plot_flag=False, plot_color=None):
+    def __init__(self, ip_list, socket_server, plot_flag=False, plot_color="001"):
         self.airsim_client_list = []
         self.plot_flag = plot_flag
         self.plot_color = plot_color
@@ -1054,9 +1054,11 @@ class CustomAirsimClient:
         Returns:
             DistanceSensorData:
         """
-        return self.vehicle_dict[vehicle_name].client.getDistanceSensorData(
-            distance_sensor_name, self.vehicle_dict[vehicle_name].airsim_name)
-
+        try:
+            return self.vehicle_dict[vehicle_name].client.getDistanceSensorData(
+                distance_sensor_name, self.vehicle_dict[vehicle_name].airsim_name)
+        except msgpackrpc.error.RPCError:
+            print(error)
     def getLidarData(self, lidar_name='', vehicle_name=''):
         """
         Args:

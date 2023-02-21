@@ -58,7 +58,7 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         # ip_list =cfg.get('options', 'ip')
 
         self.client = CustomAirsimClient(cfg.get('options', 'ip').split(','), self.socket_server,
-                                         plot_flag=False, plot_color=[0, 1, 0, 1])
+                                         plot_flag=False, plot_color="010")
         time.sleep(3)
         np.set_printoptions(formatter={'float': '{: 4.2f}'.format}, suppress=True)
         torch.set_printoptions(profile="short", sci_mode=False, linewidth=1000)
@@ -265,6 +265,8 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
         for each in range(self.num_of_drones):
             relative_yaw = self.agents[each].get_relative_yaw()
             distance_id = str(int(np.degrees(relative_yaw) // 10))
+            if distance_id == '18':
+                distance_id = '-18'
             if self.client.getDistanceSensorData("Distance_" + distance_id, self.agents[each].name).distance / \
                     200 > self.avoid_distance - 0.05:
                 self.agents[each].avoid_state = 0
@@ -454,19 +456,6 @@ class AirSimDroneEnv(gym.Env, QtCore.QThread):
     def reset(self):
 
         # reset state
-
-
-
-
-
-
-
-
-
-
-
-
-
         # self.goal_position = np.random.randn(3)*100
         self.goal_choose_name = np.random.randint(self.goal_num)
         pos = self.client.simGetObjectPose(self.goal_name[self.goal_choose_name])

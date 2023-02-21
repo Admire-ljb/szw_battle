@@ -5,7 +5,6 @@ import time
 import airsim
 import threading
 import numpy as np
-# from traind_policy import *
 
 
 class SortedBPname:
@@ -174,12 +173,12 @@ class SortedBPname:
                 if dis_temp < dis:
                     dis = dis_temp
                     x_pre_index = 1
-            if self.pre_x_friend.pre_x_friend.pre_x_friend:
-                dis_temp = np.sqrt(np.power(self.pre_x_friend.pre_x_friend.pre_x_friend.x - self.x, 2) + np.power(
-                    self.pre_x_friend.pre_x_friend.pre_x_friend.y - self.y, 2))
-                if dis_temp < dis:
-                    dis = dis_temp
-                    x_pre_index = 2
+                if self.pre_x_friend.pre_x_friend.pre_x_friend:
+                    dis_temp = np.sqrt(np.power(self.pre_x_friend.pre_x_friend.pre_x_friend.x - self.x, 2) + np.power(
+                        self.pre_x_friend.pre_x_friend.pre_x_friend.y - self.y, 2))
+                    if dis_temp < dis:
+                        dis = dis_temp
+                        x_pre_index = 2
         if self.next_x_friend:
             dis2 = np.sqrt(np.power(self.next_x_friend.x - self.x, 2) + np.power(self.next_x_friend.y - self.y, 2))
             if self.next_x_friend.next_x_friend:
@@ -188,12 +187,12 @@ class SortedBPname:
                 if dis_temp < dis2:
                     dis2 = dis_temp
                     x_next_index = 1
-            if self.next_x_friend.next_x_friend.next_x_friend:
-                dis_temp = np.sqrt(np.power(self.next_x_friend.next_x_friend.next_x_friend.x - self.x, 2) + np.power(
-                    self.next_x_friend.next_x_friend.next_x_friend.y - self.y, 2))
-                if dis_temp < dis2:
-                    dis2 = dis_temp
-                    x_next_index = 2
+                if self.next_x_friend.next_x_friend.next_x_friend:
+                    dis_temp = np.sqrt(np.power(self.next_x_friend.next_x_friend.next_x_friend.x - self.x, 2) + np.power(
+                        self.next_x_friend.next_x_friend.next_x_friend.y - self.y, 2))
+                    if dis_temp < dis2:
+                        dis2 = dis_temp
+                        x_next_index = 2
         if self.pre_y_friend:
             dis3 = np.sqrt(np.power(self.pre_y_friend.x - self.x, 2) + np.power(self.pre_y_friend.y - self.y, 2))
             if self.pre_y_friend.pre_y_friend:
@@ -201,12 +200,12 @@ class SortedBPname:
                 if dis_temp < dis3:
                     dis3 = dis_temp
                     y_pre_index = 1
-            if self.pre_y_friend.pre_y_friend.pre_y_friend:
-                dis_temp = np.sqrt(np.power(self.pre_y_friend.pre_y_friend.pre_y_friend.x - self.x, 2) + np.power(
-                    self.pre_y_friend.pre_y_friend.pre_y_friend.y - self.y, 2))
-                if dis_temp < dis3:
-                    dis3 = dis_temp
-                    y_pre_index = 2
+                if self.pre_y_friend.pre_y_friend.pre_y_friend:
+                    dis_temp = np.sqrt(np.power(self.pre_y_friend.pre_y_friend.pre_y_friend.x - self.x, 2) + np.power(
+                        self.pre_y_friend.pre_y_friend.pre_y_friend.y - self.y, 2))
+                    if dis_temp < dis3:
+                        dis3 = dis_temp
+                        y_pre_index = 2
         if self.next_y_friend:
             dis4 = np.sqrt(np.power(self.next_y_friend.x - self.x, 2) + np.power(self.next_y_friend.y - self.y, 2))
             if self.next_y_friend.next_y_friend:
@@ -215,52 +214,71 @@ class SortedBPname:
                 if dis_temp < dis4:
                     dis4 = dis_temp
                     y_next_index = 1
-            if self.next_y_friend.next_y_friend.next_y_friend:
-                dis_temp = np.sqrt(np.power(self.next_y_friend.next_y_friend.next_y_friend.x - self.x, 2) + np.power(
-                    self.next_y_friend.next_y_friend.next_y_friend.y - self.y, 2))
-                if dis_temp < dis4:
-                    dis4 = dis_temp
-                    y_next_index = 2
+                if self.next_y_friend.next_y_friend.next_y_friend:
+                    dis_temp = np.sqrt(np.power(self.next_y_friend.next_y_friend.next_y_friend.x - self.x, 2) + np.power(
+                        self.next_y_friend.next_y_friend.next_y_friend.y - self.y, 2))
+                    if dis_temp < dis4:
+                        dis4 = dis_temp
+                        y_next_index = 2
         index = np.argmin([dis, dis2, dis3, dis4])
 
         if index == 0 and self.pre_x_friend.bp_name != ban_name:
-            return dis, self.pre_x_friend
+            ans = [self.pre_x_friend, self.pre_x_friend.pre_x_friend, self.pre_x_friend.pre_x_friend.pre_x_friend]
+            return dis, ans[x_pre_index]
         if index == 1 and self.next_x_friend.bp_name != ban_name:
-            return dis2, self.next_x_friend
+            ans = [self.next_x_friend, self.next_x_friend.next_x_friend, self.next_x_friend.next_x_friend.next_x_friend]
+
+            return dis2, ans[x_next_index]
         if index == 2 and self.pre_y_friend.bp_name != ban_name:
-            return dis3, self.pre_y_friend
+            ans = [self.pre_y_friend, self.pre_y_friend.pre_y_friend, self.pre_y_friend.pre_y_friend.pre_y_friend]
+
+            return dis3, ans[y_pre_index]
         if index == 3 and self.next_y_friend != ban_name:
-            return dis4, self.next_y_friend
+            ans = [self.next_y_friend, self.next_y_friend.pre_x_friend, self.next_y_friend.next_y_friend.next_y_friend]
+            return dis4, ans[y_next_index]
         else:
             return dis, np.random.choice([self.pre_x_friend, self.next_x_friend, self.pre_y_friend, self.next_y_friend])
 
-    def get_nearest_enemy(self, ban_list):
-        dis = dis2 = dis3 = dis4 = 1000000
-        if self.pre_x_enemy in ban_list:
-            self.pre_x_enemy = self.pre_x_enemy.get_nearest_friend()
-        if self.pre_y_enemy in ban_list:
-            self.pre_y_enemy = self.pre_y_enemy.get_nearest_friend()
-        if self.next_x_enemy in ban_list:
-            self.next_x_enemy = self.next_x_enemy.get_nearest_friend()
-        if self.next_y_enemy in ban_list:
-            self.next_y_enemy = self.next_y_enemy.get_nearest_friend()
-        if self.pre_x_enemy:
-            dis = np.sqrt(np.power(self.pre_x_enemy.x - self.x, 2) + np.power(self.pre_x_enemy.y - self.y, 2))
-        if self.next_x_enemy:
-            dis2 = np.sqrt(np.power(self.next_x_enemy.x - self.x, 2) + np.power(self.next_x_enemy.y - self.y, 2))
-        if self.pre_y_enemy:
-            dis3 = np.sqrt(np.power(self.pre_y_enemy.x - self.x, 2) + np.power(self.pre_y_enemy.y - self.y, 2))
-        if self.next_y_enemy:
-            dis4 = np.sqrt(np.power(self.next_y_enemy.x - self.x, 2) + np.power(self.next_y_enemy.y - self.y, 2))
-        index = np.argmin([dis, dis2, dis3, dis4])
-        if index == 0:
-            return dis, self.pre_x_enemy
-        if index == 1:
-            return dis2, self.next_x_enemy
-        if index == 2:
-            return dis3, self.pre_y_enemy
-        else:
-            return dis4, self.next_y_enemy
+    # def get_nearest_enemy(self, ban_list):
+    #     dis = dis2 = dis3 = dis4 = 1000000
+    #     if self.pre_x_enemy in ban_list:
+    #         self.pre_x_enemy = self.pre_x_enemy.get_nearest_friend()
+    #     if self.pre_y_enemy in ban_list:
+    #         self.pre_y_enemy = self.pre_y_enemy.get_nearest_friend()
+    #     if self.next_x_enemy in ban_list:
+    #         self.next_x_enemy = self.next_x_enemy.get_nearest_friend()
+    #     if self.next_y_enemy in ban_list:
+    #         self.next_y_enemy = self.next_y_enemy.get_nearest_friend()
+    #     if self.pre_x_enemy:
+    #         dis = np.sqrt(np.power(self.pre_x_enemy.x - self.x, 2) + np.power(self.pre_x_enemy.y - self.y, 2))
+    #     if self.next_x_enemy:
+    #         dis2 = np.sqrt(np.power(self.next_x_enemy.x - self.x, 2) + np.power(self.next_x_enemy.y - self.y, 2))
+    #     if self.pre_y_enemy:
+    #         dis3 = np.sqrt(np.power(self.pre_y_enemy.x - self.x, 2) + np.power(self.pre_y_enemy.y - self.y, 2))
+    #     if self.next_y_enemy:
+    #         dis4 = np.sqrt(np.power(self.next_y_enemy.x - self.x, 2) + np.power(self.next_y_enemy.y - self.y, 2))
+    #     index = np.argmin([dis, dis2, dis3, dis4])
+    #     if index == 0:
+    #         return dis, self.pre_x_enemy
+    #     if index == 1:
+    #         return dis2, self.next_x_enemy
+    #     if index == 2:
+    #         return dis3, self.pre_y_enemy
+    #     else:
+    #         return dis4, self.next_y_enemy
+
+    def get_nearest_enemy(self, ban_list, position_dic):
+        min_distance = 50000
+        nearest_bp_name = None
+        for bp_name in position_dic:
+            if bp_name in ban_list:
+                continue
+            dis_tmp = np.sqrt(np.power(position_dic[bp_name][0] - self.x, 2) + np.power(position_dic[bp_name][1] - self.y, 2))
+            if dis_tmp < min_distance:
+                min_distance = dis_tmp
+                nearest_bp_name = bp_name
+
+        return min_distance, nearest_bp_name
 
     def destroy_self(self):
         if self.pre_x_friend:
@@ -350,7 +368,6 @@ class FixedPolicy:
         while True:
             if not self.get_caught[bp_name]:
                 x, y = self.mission_points[bp_name].next()
-
                 _ = patrol_client.moveToPositionAsync(x,
                                                       y,
                                                       self.height, self.velocity, vehicle_name=airsim_name,
